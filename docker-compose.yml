@@ -115,10 +115,21 @@ services:
       context: .
       dockerfile: Dockerfile.drift
     profiles: [drift]
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    command: ["--trigger", "adhoc"]
     env_file: .env
     environment:
       - TELEMETRY_DB_PATH=/telemetry/telemetry.db
+      - DRIFT_REPORT_PATH=/telemetry/reports/drift.json
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - CHROMA_MODE=http
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - PUSHGATEWAY_URL=http://pushgateway:9091
     volumes:
-      - ./volumes/telemetry:/telemetry:ro
+      - ./volumes/telemetry:/telemetry
     depends_on:
-      - pushgateway
+      backend:
+        condition: service_healthy
+      pushgateway:
+        condition: service_started
