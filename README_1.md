@@ -2,8 +2,6 @@
 
 # Aegis-RAG
 
-Based on [ComplianceCheckRAG by jingyiyanlol](https://github.com/jingyiyanlol/ComplianceCheckRAG). Original attribution is retained.
-
 > 本机启动与故障排查请先看 [运行说明](README.md)。
 
 A self-hosted, multi-turn RAG application for highly secure teams to check on compliance against a knowledge-base, e.g. for bank compliance teams. Users can ask questions across regulatory documents and get cited, streamed answers via a mobile-friendly chat UI — with a full MLOps monitoring pipeline built in.

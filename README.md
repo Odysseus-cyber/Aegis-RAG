@@ -4,7 +4,7 @@
 
 Aegis-RAG 是一个本地 PDF 问答应用：选择文档、多轮流式回答、引用、脱敏、反馈以及可观察的模型评估。使用 React、FastAPI、Ollama 和 ChromaDB，默认模型是 `gemma3:1b` 与 `nomic-embed-text`。
 
-基于 [ComplianceCheckRAG](https://github.com/jingyiyanlol/ComplianceCheckRAG) 改造，保留原项目来源与贡献者署名。原源码未附许可证，本次改名不新增许可声明。完整说明见 [架构与功能](README_1.md)。
+项目架构与功能说明请参阅 [技术文档](README_1.md)。
 
 ## 运行截图
 
