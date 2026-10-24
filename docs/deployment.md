@@ -88,3 +88,32 @@ both destinations, the utility removes the corresponding source keys. Repeating
 a completed migration is harmless; an interrupted operation can be retried after
 checking storage access. The downloaded backup contains private conversations
 and must never be committed or uploaded with project materials.
+
+### Save browser snapshots directly to a private local archive
+
+If the browser cannot reliably save or select a downloaded backup, stop the
+application occupying the origin's port and run the temporary helper from the
+project directory:
+
+```bash
+.venv/bin/python scripts/serve_storage_migration.py \
+  --port 15173 --archive-dir "$ARCHIVE/browser/15173"
+```
+
+Set `ARCHIVE` to the absolute private migration archive path outside the project
+before running this command. For the native application's storage, use port
+`5173` and a separate archive subdirectory. The helper binds only `127.0.0.1`;
+open `/storage-migration.html` using the same hostname and port as the application
+whose browser data is being migrated. `localhost` and `127.0.0.1` are separate
+browser origins and must be processed separately when both were used.
+
+After inspecting the snapshot, choose **保存到本机私有归档并验证**. The helper
+writes a new private JSON file, reads back its exact bytes, and returns a receipt.
+The page checks the receipt's digest, byte count, and origin before enabling
+migration. The usual download-and-upload verification remains available. A normal
+published application does not implement `/migration-backup`; an unavailable
+helper never authorizes skipping the backup. Stop the temporary helper with
+Ctrl-C after finishing each origin, before restarting the application.
+
+The migration HTML and module imports carry an explicit asset version so a
+previous browser cache cannot silently load an older migration interface.

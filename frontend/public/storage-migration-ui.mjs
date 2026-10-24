@@ -1,13 +1,14 @@
 const { document, location, localStorage, Blob, URL, setTimeout } = globalThis;
 
-  import { snapshotStorage, migrateStorage } from './storage-migration.mjs';
+  import { snapshotStorage, migrateStorage } from './storage-migration.mjs?version=2';
+  import { archiveSnapshot } from './storage-migration-backup.mjs?version=2';
   const byId = (id) => document.getElementById(id);
   byId('origin').textContent = location.origin;
   let snapshot = null;
   let verified = false;
   const status = (text) => { byId('status').textContent = text; };
   const reset = () => { snapshot = null; verified = false; byId('backup').disabled = true;
-    byId('backup').value = ''; byId('migrate').disabled = true; };
+    byId('backup').value = ''; byId('migrate').disabled = true; byId('archive').disabled = true; };
   for (const id of ['source-conversations', 'source-active']) byId(id).addEventListener('input', reset);
   byId('inspect').addEventListener('click', () => {
     reset();
@@ -21,9 +22,22 @@ const { document, location, localStorage, Blob, URL, setTimeout } = globalThis;
       link.download = `aegis-rag-browser-backup-${location.hostname}-${location.port || 'default'}-${Date.now()}.json`;
       document.body.appendChild(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30000);
-      byId('backup').disabled = false;
+      byId('backup').disabled = false; byId('archive').disabled = false;
       status(`发现 ${count} 条源会话。备份下载已触发；请确认文件保存，再选择同一文件验证。尚未修改存储。`);
     } catch (error) { status(error.message); }
+  });
+  byId('archive').addEventListener('click', async () => {
+    verified = false; byId('migrate').disabled = true; byId('archive').disabled = true;
+    const captured = snapshot;
+    try {
+      if (!captured) throw new Error('请先检查并导出快照。');
+      const receipt = await archiveSnapshot(captured);
+      if (snapshot !== captured) throw new Error('快照已变化，请重新归档。');
+      verified = true; byId('migrate').disabled = false;
+      status(`本机私有归档已保存并读回核对：${receipt.receipt}（${receipt.bytes} 字节）。可以迁移。`);
+    } catch (error) {
+      status(`${error.message}\n可使用导出 + 上传同一备份文件验证，不能跳过备份。`);
+    } finally { byId('archive').disabled = !snapshot; }
   });
   byId('backup').addEventListener('change', async () => {
     verified = false; byId('migrate').disabled = true;
