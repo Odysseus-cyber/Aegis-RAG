@@ -5,10 +5,12 @@ No source build, host PDF, existing Chroma or native telemetry is used.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import tarfile
 import time
@@ -51,8 +53,23 @@ def read_json(url, data=None):
 
 
 def download(url, destination):
-    with urllib.request.urlopen(url, timeout=120) as response, destination.open('wb') as output:
-        shutil.copyfileobj(response, output)
+    temporary = destination.with_name(destination.name + '.part')
+    for attempt in range(3):
+        try:
+            with urllib.request.urlopen(url, timeout=120) as response, temporary.open('wb') as output:
+                shutil.copyfileobj(response, output)
+                expected = response.headers.get('Content-Length')
+                if expected is not None and output.tell() != int(expected):
+                    raise urllib.error.URLError('Download ended before the advertised Content-Length')
+            temporary.replace(destination)
+            return
+        except (urllib.error.URLError, TimeoutError, ConnectionError, ssl.SSLEOFError, http.client.IncompleteRead):
+            if attempt == 2:
+                raise
+            print(f'Download interrupted; retrying {destination.name} ({attempt + 2}/3)')
+            time.sleep(attempt + 1)
+        finally:
+            temporary.unlink(missing_ok=True)
 
 
 def unpack_bundle(archive, destination):
@@ -94,7 +111,7 @@ def prepare(version):
 
 def preflight(record):
     config = record['config']
-    compose(config, '--profile', 'drift', 'pull')
+    compose(config, '--profile', 'drift', 'pull', '--policy', 'missing')
     for name, image in record['manifest']['images'].items():
         reference = image['image'] + '@' + image['digest']
         details = json.loads(command('docker', 'image', 'inspect', reference, capture=True).stdout)[0]
