@@ -138,7 +138,7 @@ def test_preflight_rejects_wrong_oci_revision_before_starting(monkeypatch):
         stdout=json.dumps([{'Config': {'Labels': {'org.opencontainers.image.revision': 'b' * 40}}}])))
     with pytest.raises(RuntimeError, match='OCI revision'):
         deploy.preflight({'config': 'candidate', 'manifest': manifest()})
-    assert calls == [('candidate', '--profile', 'drift', 'pull')]
+    assert calls == [('candidate', '--profile', 'drift', 'pull', '--policy', 'missing')]
 
 
 def test_redeploy_same_commit_preserves_last_distinct_version(operations):
@@ -191,3 +191,88 @@ def test_activate_refreshes_proxy_after_backend_ready_and_waits_for_http(monkeyp
         ('compose', ('release.json', 'restart', 'frontend')),
         ('health', deploy.API + '/health'),
     ]
+
+
+@pytest.mark.parametrize('first_error', [
+    deploy.urllib.error.URLError('TLS EOF'), TimeoutError('timeout'), deploy.ssl.SSLEOFError('TLS stream ended'),
+])
+def test_download_retries_connection_failure_then_publishes_complete_file(tmp_path, monkeypatch, first_error):
+    from unittest.mock import Mock
+
+    destination = tmp_path / 'delivery.json'
+    response = io.BytesIO(b'complete')
+    response.headers = {'Content-Length': '8'}
+    urlopen = Mock(side_effect=[first_error, response])
+    monkeypatch.setattr(deploy.urllib.request, 'urlopen', urlopen)
+    monkeypatch.setattr(deploy.time, 'sleep', lambda seconds: None)
+    deploy.download('https://example.test/delivery.json', destination)
+    assert destination.read_bytes() == b'complete'
+    assert urlopen.call_count == 2
+    assert not destination.with_name('delivery.json.part').exists()
+
+
+def test_download_does_not_publish_partial_response_and_retries_cleanly(tmp_path, monkeypatch):
+    destination = tmp_path / 'deployment.tar.gz'
+    destination.write_bytes(b'previous complete release')
+    calls = []
+
+    class InterruptedResponse(io.BytesIO):
+        headers = {'Content-Length': '100'}
+
+        def read(self, size=-1):
+            if self.tell():
+                raise deploy.urllib.error.URLError('connection ended')
+            return super().read(size)
+
+    def urlopen(*args, **kwargs):
+        calls.append(args)
+        # The original artifact survives both an in-flight and failed replacement.
+        assert destination.read_bytes() == b'previous complete release'
+        if len(calls) == 1:
+            return InterruptedResponse(b'partial')
+        assert not destination.with_name(destination.name + '.part').exists()
+        response = io.BytesIO(b'new complete release')
+        response.headers = {}
+        return response
+
+    monkeypatch.setattr(deploy.urllib.request, 'urlopen', urlopen)
+    monkeypatch.setattr(deploy.time, 'sleep', lambda seconds: None)
+    deploy.download('https://example.test/deployment.tar.gz', destination)
+    assert destination.read_bytes() == b'new complete release'
+    assert len(calls) == 2
+    assert not destination.with_name(destination.name + '.part').exists()
+
+
+def test_download_exhaustion_raises_without_replacing_existing_file(tmp_path, monkeypatch):
+    from unittest.mock import Mock
+
+    destination = tmp_path / 'delivery.json'
+    destination.write_bytes(b'previous')
+    error = deploy.urllib.error.URLError('network remains unavailable')
+    urlopen = Mock(side_effect=error)
+    monkeypatch.setattr(deploy.urllib.request, 'urlopen', urlopen)
+    monkeypatch.setattr(deploy.time, 'sleep', lambda seconds: None)
+    with pytest.raises(deploy.urllib.error.URLError, match='network remains unavailable'):
+        deploy.download('https://example.test/delivery.json', destination)
+    assert urlopen.call_count == 3
+    assert destination.read_bytes() == b'previous'
+    assert not destination.with_name(destination.name + '.part').exists()
+
+
+def test_download_rejects_silent_short_body(tmp_path, monkeypatch):
+    calls = []
+
+    def urlopen(*args, **kwargs):
+        calls.append(args)
+        response = io.BytesIO(b'short')
+        response.headers = {'Content-Length': '100'}
+        return response
+
+    monkeypatch.setattr(deploy.urllib.request, 'urlopen', urlopen)
+    monkeypatch.setattr(deploy.time, 'sleep', lambda seconds: None)
+    destination = tmp_path / 'deployment.tar.gz'
+    with pytest.raises(deploy.urllib.error.URLError, match='Content-Length'):
+        deploy.download('https://example.test/deployment.tar.gz', destination)
+    assert len(calls) == 3
+    assert not destination.exists()
+    assert not destination.with_name(destination.name + '.part').exists()
