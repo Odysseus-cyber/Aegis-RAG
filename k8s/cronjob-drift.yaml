@@ -1,0 +1,29 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: drift-job
+  namespace: aegis-rag
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: drift-job
+              image: ghcr.io/odysseus-cyber/aegis-rag/drift:REPLACE_WITH_COMMIT_SHA
+              args: ["--trigger", "cron"]
+              envFrom:
+                - configMapRef:
+                    name: aegis-rag-config
+                - secretRef:
+                    name: aegis-rag-secret
+              volumeMounts:
+                - name: telemetry
+                  mountPath: /telemetry
+          volumes:
+            - name: telemetry
+              persistentVolumeClaim:
+                claimName: telemetry-pvc

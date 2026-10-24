@@ -1,0 +1,2 @@
+# Drift statistics are tested alongside API tests, without expanding backend runtime deps.
+scipy==1.15.3

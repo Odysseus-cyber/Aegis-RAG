@@ -1,0 +1,46 @@
+# PDFs and generated artifacts
+data/*.pdf
+llms-txt/
+
+# Persistent volumes (keep directory structure with .gitkeep only)
+volumes/*/
+!volumes/**/.gitkeep
+
+# Telemetry database
+telemetry.db
+*.db-wal
+*.db-shm
+monitoring/drift_job/last_snapshot.json
+/baseline.json
+reports/
+
+# Local ChromaDB data (dev mode)
+.chroma/
+
+# Environment
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# Docker
+*.log
+
+# macOS
+.DS_Store
+
+# Project-local runtimes and repair backup
+.runtime/

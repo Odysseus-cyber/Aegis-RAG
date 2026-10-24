@@ -1,0 +1,54 @@
+# Aegis-RAG deployment
+
+## Native development
+
+Use `make setup`, `make doctor`, `make backend`, and `make frontend` as described in the main [README](../README.md). The native application uses backend `127.0.0.1:8000`, frontend `127.0.0.1:5173`, and the existing local Ollama.
+
+## Published local demo
+
+The unified [delivery workflow](../.github/workflows/delivery.yml) publishes backend, frontend, and drift images for AMD64 and ARM64 under `ghcr.io/odysseus-cyber/aegis-rag`. Each successful release uses the tag `sha-<full-commit-SHA>` and includes `delivery.json` plus `deployment.tar.gz`. The manifest records exact image digests so a deployment uses one complete revision.
+
+```bash
+make deploy-demo VERSION=<full-commit-SHA>
+make verify-demo
+make evaluate-demo
+make rollback-demo
+```
+
+Docker Desktop and host Ollama must be running, with `gemma3:1b` and `nomic-embed-text` installed. Containers reach Ollama at `host.docker.internal:11434`; the deployment preflight tests that connection and checks installed models.
+
+| Service | Loopback URL |
+|---|---|
+| Frontend | http://127.0.0.1:15173 |
+| Backend | http://127.0.0.1:18000 |
+| ChromaDB | http://127.0.0.1:18001 |
+| Prometheus | http://127.0.0.1:19090 |
+| Pushgateway | http://127.0.0.1:19091 |
+| Grafana | http://127.0.0.1:13000 |
+
+Demo data, current and previous manifests, and run evidence live under `.runtime/aegis-demo`. The deployment uses dedicated sample PDFs and persistent directories, and preserves the native app's PDFs, index and chat history. The UI footer displays the backend revision and links to its Actions run; `GET /version` returns the application name, full commit SHA, build time and Actions URL.
+
+Deployment pulls the complete image set before replacing services, then checks health and performs two real chat turns, repeat ingestion and immediate feedback. A functional failure is reported and restores the previous application release when available. First deployment failure remains a failed deployment. Rollback never clears persistent data and does not roll back database contents.
+
+Quality evaluation runs after functional acceptance and reports independently. Alerts and insufficient samples do not block deployment or trigger rollback; execution failures remain explicit. See [monitoring](monitoring.md) for the metric and exit-code contracts.
+
+## Development Compose
+
+The root `docker-compose.yml` builds directly from source and runs its own Ollama. Its default ports overlap the native app, so stop conflicting services or use the isolated validation helper described in the main README. The published demo above is the preferred side-by-side demonstration.
+
+```bash
+cp .env.example .env  # only if .env does not already exist
+# Edit .env as needed, then:
+docker compose up -d --build
+docker compose exec backend python -m app.rag.ingest
+```
+
+The backend waits for model initialization, and frontend startup waits for backend health. Nginx keeps response buffering disabled for streamed answers. Writable telemetry and Chroma paths must match their mounts; do not mount the telemetry database read-only because evaluation writes results and missing embeddings.
+
+## Kubernetes examples
+
+`k8s/manifests.yaml` and `k8s/cronjob-drift.yaml` use namespace `aegis-rag` and the same GHCR image names. Replace every `REPLACE_WITH_COMMIT_SHA` with a tested release SHA before applying. These are examples; Kubernetes deployment is outside the local acceptance target.
+
+The manifests contain Ollama, ChromaDB, backend and frontend services plus their configuration and volumes. Monitoring endpoints referenced by the configuration must be provisioned separately. The nightly drift CronJob uses shared configuration and a writable telemetry PVC. Choose storage that supports the cluster's scheduling and single-writer SQLite requirements.
+
+Local storage keys, database tables, `compliance_docs`, and `ccrag_*` Prometheus metrics retain their names for compatibility. The new namespace is intended for fresh deployments; do not change an existing cluster namespace without migrating its persistent volumes.

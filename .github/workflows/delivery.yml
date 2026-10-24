@@ -1,0 +1,199 @@
+name: Aegis-RAG CI and Delivery
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: delivery-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-test.txt
+      - run: pip install "en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl"
+      - run: pip check
+      - run: ruff check .
+      - run: pytest tests/ --junitxml=reports/pytest.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-test-results
+          path: reports/
+
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test -- --reporter=default --reporter=junit --outputFile=reports/vitest.xml
+      - run: npm run build
+      - name: Gzipped JavaScript budget (200 KiB)
+        run: |
+          total=$(find dist/assets -name '*.js' -exec gzip -c {} \; | wc -c)
+          echo "Gzipped JavaScript: $total bytes" >> "$GITHUB_STEP_SUMMARY"
+          test "$total" -le 204800
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-results
+          path: |
+            frontend/reports/
+            frontend/dist/
+
+  configuration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: false
+      - name: Validate workflow syntax
+        run: |
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          "$(go env GOPATH)/bin/actionlint" -shellcheck=''
+      - name: Validate Compose
+        run: |
+          cp .env.example .env
+          docker compose config --quiet
+          docker compose -f docker-compose.release.yml config --quiet
+      - name: Validate Prometheus configuration and dashboards
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/monitoring:/etc/prometheus:ro" prom/prometheus:v3.4.0 check config /etc/prometheus/prometheus.yml
+          python -c "import json,pathlib; [json.loads(p.read_text()) for p in pathlib.Path('monitoring/grafana').rglob('*.json')]"
+
+  images:
+    needs: [backend, frontend, configuration]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: backend
+            context: .
+            file: Dockerfile
+          - image: frontend
+            context: frontend
+            file: frontend/Dockerfile
+          - image: drift
+            context: .
+            file: Dockerfile.drift
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Build metadata
+        id: meta
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "image=ghcr.io/${REPOSITORY,,}/${{ matrix.image }}" >> "$GITHUB_OUTPUT"
+          echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        id: build
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.image }}:${{ github.sha }}
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
+            BUILD_TIME=${{ steps.meta.outputs.created }}
+            ACTIONS_URL=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+      - name: Record published digest
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+          CREATED: ${{ steps.meta.outputs.created }}
+          IMAGE_NAME: ${{ matrix.image }}
+        run: |
+          mkdir -p manifests
+          docker buildx imagetools inspect --raw "$IMAGE@$DIGEST" > platforms.json
+          python -c 'import json; p={(m.get("platform",{}).get("os"),m.get("platform",{}).get("architecture")) for m in json.load(open("platforms.json"))["manifests"]}; assert {("linux","amd64"),("linux","arm64")} <= p, p'
+          python -c 'import json,os,pathlib; pathlib.Path("manifests",os.environ["IMAGE_NAME"]+".json").write_text(json.dumps({"image":os.environ["IMAGE"],"digest":os.environ["DIGEST"],"created":os.environ["CREATED"]}))'
+          docker buildx imagetools inspect "$IMAGE@$DIGEST" > "manifests/$IMAGE_NAME.txt"
+      - uses: actions/upload-artifact@v4
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        with:
+          name: image-${{ matrix.image }}
+          path: manifests/
+
+  release:
+    needs: images
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: image-*
+          path: manifests
+          merge-multiple: true
+      - name: Assemble complete delivery
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          ACTIONS_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python scripts/release_manifest.py manifests delivery.json
+          tar -czf deployment.tar.gz docker-compose.release.yml monitoring/prometheus.yml monitoring/grafana tests/fixtures/aegis-demo.pdf
+      - name: Publish immutable release manifest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if gh release view "sha-$COMMIT_SHA" >/dev/null 2>&1; then
+            echo "This commit already has an immutable release; preserving its existing manifest."
+            exit 0
+          fi
+          gh release create "sha-$COMMIT_SHA" delivery.json deployment.tar.gz manifests/*.txt --target "$COMMIT_SHA" --title "Aegis-RAG $COMMIT_SHA" --notes "Validated backend, frontend and drift images. Deploy using the digest-pinned delivery.json."
+          echo "Published [delivery manifest](https://github.com/$GITHUB_REPOSITORY/releases/tag/sha-$COMMIT_SHA)" >> "$GITHUB_STEP_SUMMARY"

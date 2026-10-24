@@ -1,0 +1,135 @@
+services:
+  ollama:
+    image: ollama/ollama:0.7.0
+    volumes:
+      - ./volumes/ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    healthcheck:
+      test: ["CMD", "sh", "-c", "timeout 5 bash -c '</dev/tcp/127.0.0.1/11434' && echo 'healthy' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  chromadb:
+    image: chromadb/chroma:1.5.9
+    volumes:
+      - ./volumes/chromadb:/data
+    ports:
+      - "8001:8000"
+    environment:
+      - ANONYMIZED_TELEMETRY=false
+      - PERSIST_DIRECTORY=/data
+      - CHROMA_PERSIST_PATH=/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "timeout 5 bash -c '</dev/tcp/127.0.0.1/8000' && echo 'healthy' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    build: .
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      - CHROMA_MODE=http
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - TELEMETRY_DB_PATH=/app/telemetry/telemetry.db
+    volumes:
+      - ./data:/app/data
+      - ./llms-txt:/app/llms-txt
+      - ./volumes/telemetry:/app/telemetry
+    depends_on:
+      chromadb:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      ollama-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./volumes/prometheus:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=30d"
+
+  grafana:
+    image: grafana/grafana:11.6.1
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - ./volumes/grafana:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+
+  pushgateway:
+    image: prom/pushgateway:v1.11.1
+    ports:
+      - "9091:9091"
+
+  ollama-init:
+    image: ollama/ollama:0.7.0
+    entrypoint: /bin/sh
+    command:
+      - -ec
+      - 'ollama show "$$LLM_MODEL" >/dev/null 2>&1 || ollama pull "$$LLM_MODEL"; ollama show "$$EMBED_MODEL" >/dev/null 2>&1 || ollama pull "$$EMBED_MODEL"'
+    env_file: .env
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: "no"
+
+  drift-job:
+    build:
+      context: .
+      dockerfile: Dockerfile.drift
+    profiles: [drift]
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    command: ["--trigger", "adhoc"]
+    env_file: .env
+    environment:
+      - TELEMETRY_DB_PATH=/telemetry/telemetry.db
+      - DRIFT_REPORT_PATH=/telemetry/reports/drift.json
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - CHROMA_MODE=http
+      - CHROMA_HOST=chromadb
+      - CHROMA_PORT=8000
+      - PUSHGATEWAY_URL=http://pushgateway:9091
+    volumes:
+      - ./volumes/telemetry:/telemetry
+    depends_on:
+      backend:
+        condition: service_healthy
+      pushgateway:
+        condition: service_started

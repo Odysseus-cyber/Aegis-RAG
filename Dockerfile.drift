@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+RUN groupadd -r driftuser && useradd -r -g driftuser driftuser
+WORKDIR /app
+COPY monitoring/drift_job/requirements.drift.txt .
+RUN pip install --no-cache-dir -r requirements.drift.txt && pip check
+COPY monitoring/drift_job/ ./monitoring/drift_job/
+COPY app/config.py app/__init__.py ./app/
+COPY app/telemetry/schema.py app/telemetry/__init__.py ./app/telemetry/
+RUN mkdir -p /app/telemetry /app/reports && chown -R driftuser:driftuser /app
+USER driftuser
+# Release identity belongs after dependency layers so each commit reuses their cache.
+ARG COMMIT_SHA=development
+ARG BUILD_TIME=unknown
+ARG ACTIONS_URL=
+LABEL org.opencontainers.image.title="Aegis-RAG drift evaluator" \
+      org.opencontainers.image.revision=$COMMIT_SHA \
+      org.opencontainers.image.created=$BUILD_TIME \
+      org.opencontainers.image.source="https://github.com/Odysseus-cyber/Aegis-RAG"
+ENV COMMIT_SHA=$COMMIT_SHA BUILD_TIME=$BUILD_TIME ACTIONS_URL=$ACTIONS_URL
+ENTRYPOINT ["python", "-m", "monitoring.drift_job.run_drift"]
