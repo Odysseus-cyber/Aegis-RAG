@@ -6,6 +6,7 @@ x-app-env: &app-env
   CHROMA_MODE: http
   CHROMA_HOST: chromadb
   CHROMA_PORT: '8000'
+  CHROMA_COLLECTION: aegis_rag_documents
   TELEMETRY_DB_PATH: /app/telemetry/telemetry.db
   PUSHGATEWAY_URL: http://pushgateway:9091
   DATA_DIR: /app/data
@@ -59,7 +60,7 @@ services:
     ports: ['127.0.0.1:13000:3000']
     user: '${LOCAL_UID:-1000}:${LOCAL_GID:-1000}'
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: aegis-local-demo
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD or use make deploy-demo}
       GF_USERS_ALLOW_SIGN_UP: 'false'
     volumes:
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro

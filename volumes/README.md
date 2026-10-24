@@ -17,13 +17,13 @@ This directory contains local persistent volumes for Docker Compose services. Da
 To backup all persistent data:
 
 ```bash
-tar -czf ccrag-data-$(date +%Y%m%d-%H%M%S).tar.gz volumes/
+tar -czf aegis-rag-data-$(date +%Y%m%d-%H%M%S).tar.gz volumes/
 ```
 
 To restore from backup:
 
 ```bash
-tar -xzf ccrag-data-*.tar.gz
+tar -xzf aegis-rag-data-*.tar.gz
 docker compose up -d
 ```
 

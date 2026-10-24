@@ -17,7 +17,7 @@ data:
   CHROMA_MODE: "http"
   CHROMA_HOST: "chromadb"
   CHROMA_PORT: "8000"
-  CHROMA_COLLECTION: "compliance_docs"
+  CHROMA_COLLECTION: "aegis_rag_documents"
   TELEMETRY_DB_PATH: "/telemetry/telemetry.db"
   LOG_LEVEL: "INFO"
   PUSHGATEWAY_URL: "http://pushgateway:9091"

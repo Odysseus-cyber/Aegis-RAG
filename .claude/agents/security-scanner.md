@@ -55,7 +55,7 @@ You are an application security engineer reviewing the Aegis-RAG codebase. This 
 ## Network
 
 - Services bound to `0.0.0.0` only when intentionally exposed
-- Grafana default password `admin/admin` changed
+- Grafana administrator password is private and not hardcoded
 - ChromaDB exposed without auth (acceptable for local docker-compose; flag for K8s)
 - Backend CORS: explicit `allow_origins`, not `["*"]`
 

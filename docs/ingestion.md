@@ -76,7 +76,7 @@ The **Chroma ID** is `{doc_name}::{chunk_index}::{content_hash}` — this compos
 
 ### 5. Embed and upsert (`app/rag/ingest.py`)
 
-Each chunk's text is embedded using `nomic-embed-text` via the Ollama client. The embedding, text, and metadata are upserted into ChromaDB under the collection defined by `settings.chroma_collection` (default: `compliance_docs`).
+Each chunk's text is embedded using `nomic-embed-text` via the Ollama client. The embedding, text, and metadata are upserted into ChromaDB under the collection defined by `settings.chroma_collection` (default: `aegis_rag_documents`).
 
 ChromaDB is accessed via:
 - `PersistentClient` when `CHROMA_MODE=local` (default for dev — no Docker needed)
@@ -122,6 +122,6 @@ Re-running ingestion on the same PDFs:
 | `LLMS_TXT_DIR` | `llms-txt` | Output directory for markdown artifacts |
 | `CHROMA_MODE` | `local` | `local` = PersistentClient; `http` = server |
 | `CHROMA_LOCAL_PATH` | `.chroma` | On-disk path (local mode only) |
-| `CHROMA_COLLECTION` | `compliance_docs` | ChromaDB collection name |
+| `CHROMA_COLLECTION` | `aegis_rag_documents` | ChromaDB collection name |
 | `EMBED_MODEL` | `nomic-embed-text` | Ollama embedding model |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |

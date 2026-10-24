@@ -67,7 +67,7 @@ make rollback-demo
 发布脚本使用同一清单中的三个镜像，不在本机重建源码；部署前检查 OCI 提交信息与容器到 Ollama 的连接。已缓存的精确 digest 镜像可直接复用，缺失镜像才下载；发布资产下载遇到临时网络错误最多尝试三次，失败仍以非零状态退出。部署前会验证 GHCR 下载权限；本仓库已发布的镜像支持匿名拉取。如果在其他仓库首次发布时包默认为私有，需将三个包设为公开，或使用用户自行配置的 Docker 登录。
 
 - 应用：**http://127.0.0.1:15173**
-- Grafana：**http://127.0.0.1:13000**，本机演示账号 `admin`，密码 `aegis-local-demo`
+- Grafana：**http://127.0.0.1:13000**，本机演示账号 `admin`；部署时生成的随机密码保存在本地私有文件 `.runtime/aegis-demo/grafana-admin-password`，不要提交或分享该文件。
 - Prometheus：**http://127.0.0.1:19090**
 - 后端：`127.0.0.1:18000`；ChromaDB：`127.0.0.1:18001`；Pushgateway：`127.0.0.1:19091`
 
@@ -109,6 +109,6 @@ docker compose -f docker-compose.release.yml config --quiet
 
 测试使用临时数据库，常规 CI 不需要真实模型。真实模型演示、容器构建、远程 Actions 与 GHCR 拉取是不同验收阶段，必须分别验证。Kubernetes 示例仅同步名称与配置，本轮不作为已验收部署方式。
 
-改名保留 `ccrag_*` 指标、既有 localStorage 键、`compliance_docs` 集合及数据库表结构。前端 parser 6.1.5 已包含官方安全回补；此前 `npm audit` 的版本范围仍报告三项中等告警，未通过忽略规则隐藏。
+当前版本使用 `aegis_rag_*` 指标、新会话存储键和 `aegis_rag_documents` 集合，数据库表结构与消息 ID 保持不变。已有部署需要先完成数据迁移；常规回滚仅适用于同一存储命名体系。前端 parser 6.1.5 已包含官方安全回补；此前 `npm audit` 的版本范围仍报告三项中等告警，未通过忽略规则隐藏。
 
 本机运行环境、原项目修复前源码及索引备份均保存在被 Git 排除的 `.runtime/`。README 使用的专用演示截图保存在 `docs/images/`；其余构建日志、验收截图及运行报告保存在 `.runtime/`，不随公开源码上传。

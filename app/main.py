@@ -17,13 +17,13 @@ from pydantic import BaseModel, Field, field_validator
 from app.config import settings
 from app.conversation import get_conversation_history, get_or_create_conversation
 from app.metrics import (
-    ccrag_chunks_retrieved,
-    ccrag_feedback_total,
-    ccrag_llm_latency_seconds,
-    ccrag_pii_hits_total,
-    ccrag_query_latency_seconds,
-    ccrag_query_total,
-    ccrag_retrieval_latency_seconds,
+    aegis_rag_chunks_retrieved,
+    aegis_rag_feedback_total,
+    aegis_rag_llm_latency_seconds,
+    aegis_rag_pii_hits_total,
+    aegis_rag_query_latency_seconds,
+    aegis_rag_query_total,
+    aegis_rag_retrieval_latency_seconds,
 )
 from app.pii import mask
 from app.rag.generate import generate_response
@@ -148,7 +148,7 @@ async def chat(req: ChatRequest) -> StreamingResponse:
         pii_entities=pii_entities,
     )
     for entity in pii_entities:
-        ccrag_pii_hits_total.labels(entity_type=entity["entity_type"]).inc()
+        aegis_rag_pii_hits_total.labels(entity_type=entity["entity_type"]).inc()
     message_id = str(uuid.uuid4())
 
     async def event_stream() -> AsyncGenerator[str, None]:
@@ -163,8 +163,8 @@ async def chat(req: ChatRequest) -> StreamingResponse:
             chunks, query_embedding = await retrieve(rewritten, doc_filter=req.doc_filter)
             retrieval_ms = int((time.monotonic() - retrieval_start) * 1000)
 
-            ccrag_retrieval_latency_seconds.observe(retrieval_ms / 1000)
-            ccrag_chunks_retrieved.observe(len(chunks))
+            aegis_rag_retrieval_latency_seconds.observe(retrieval_ms / 1000)
+            aegis_rag_chunks_retrieved.observe(len(chunks))
 
             citations = [
                 {
@@ -189,8 +189,8 @@ async def chat(req: ChatRequest) -> StreamingResponse:
             llm_ms = int((time.monotonic() - llm_start) * 1000)
             total_ms = int((time.monotonic() - query_start) * 1000)
 
-            ccrag_llm_latency_seconds.observe(llm_ms / 1000)
-            ccrag_query_latency_seconds.observe(total_ms / 1000)
+            aegis_rag_llm_latency_seconds.observe(llm_ms / 1000)
+            aegis_rag_query_latency_seconds.observe(total_ms / 1000)
 
             response_text, _ = await asyncio.to_thread(mask, "".join(full_response))
 
@@ -217,14 +217,14 @@ async def chat(req: ChatRequest) -> StreamingResponse:
                 pii_entities=pii_entities,
             )
 
-            ccrag_query_total.labels(status="success").inc()
+            aegis_rag_query_total.labels(status="success").inc()
             yield "event: done\ndata: {}\n\n"
         except asyncio.CancelledError:
-            ccrag_query_total.labels(status="cancelled").inc()
+            aegis_rag_query_total.labels(status="cancelled").inc()
             raise
         except Exception:
             logger.exception("%s failed", stage)
-            ccrag_query_total.labels(status="error").inc()
+            aegis_rag_query_total.labels(status="error").inc()
             error = {"message": f"{stage} failed. Check the backend logs and retry."}
             yield f"event: error\ndata: {json.dumps(error)}\n\n"
 
@@ -257,7 +257,7 @@ async def feedback(req: FeedbackRequest) -> dict:
         )
     except LookupError as exc:
         raise HTTPException(404, str(exc)) from exc
-    ccrag_feedback_total.labels(rating=str(req.rating)).inc()
+    aegis_rag_feedback_total.labels(rating=str(req.rating)).inc()
     return {"feedback_id": feedback_id}
 
 

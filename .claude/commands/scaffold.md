@@ -43,7 +43,7 @@ Bootstrap Aegis-RAG from scratch. Run only once at project start.
    - `logger.py` — awaited `save_message(...)` for chat persistence; retain background helper only for ancillary callers
    - `feedback.py` — `async def record_feedback(...)`
 
-9. `app/metrics.py` — all `ccrag_*` Prometheus metrics from CLAUDE.md
+9. `app/metrics.py` — all `aegis_rag_*` Prometheus metrics from CLAUDE.md
 
 ## Frontend
 

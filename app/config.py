@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     chroma_host: str = "localhost"
     chroma_port: int = 8001
     chroma_auth_token: str = ""
-    chroma_collection: str = "compliance_docs"
+    chroma_collection: str = "aegis_rag_documents"
 
     # Telemetry
     telemetry_db_path: str = "telemetry.db"

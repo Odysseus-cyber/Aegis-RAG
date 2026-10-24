@@ -17,6 +17,13 @@ make rollback-demo
 
 Docker Desktop and host Ollama must be running, with `gemma3:1b` and `nomic-embed-text` installed. Containers reach Ollama at `host.docker.internal:11434`; the deployment preflight tests that connection and checks installed models.
 
+The demo generates a random Grafana administrator password in the private local
+file `.runtime/aegis-demo/grafana-admin-password` and reuses it across releases.
+Log in as `admin` using that file's value. Keep the password and generated Compose
+configuration private; both are stored with owner-only permissions. An existing
+Grafana database retains its initialized password, so preserve the password file
+alongside its data when archiving or restoring an installation.
+
 | Service | Loopback URL |
 |---|---|
 | Frontend | http://127.0.0.1:15173 |
@@ -30,6 +37,17 @@ Demo data, current and previous manifests, and run evidence live under `.runtime
 
 Deployment pulls the complete image set before replacing services, then checks health and performs two real chat turns, repeat ingestion and immediate feedback. A functional failure is reported and restores the previous application release when available. First deployment failure remains a failed deployment. Rollback never clears persistent data and does not roll back database contents.
 
+The authoritative deployment record is `.runtime/aegis-demo/state.json`, which stores
+the current and previous verified releases together with storage namespace
+`aegis-rag-v2`. Deployment and rollback commit this pair with one atomic file
+replacement after verification. If that commit fails, the prior application is
+restored and the original state file is retained; a first deployment is stopped
+without removing persistent data. Old separate `current.json` or `previous.json`
+files without `state.json` are rejected before service changes. Archive those
+records with the pre-migration application and data; do not convert them into a
+rollback target. The first verified release in the new namespace has no ordinary
+rollback target until another compatible release passes acceptance.
+
 Quality evaluation runs after functional acceptance and reports independently. Alerts and insufficient samples do not block deployment or trigger rollback; execution failures remain explicit. See [monitoring](monitoring.md) for the metric and exit-code contracts.
 
 ## Development Compose
@@ -38,7 +56,8 @@ The root `docker-compose.yml` builds directly from source and runs its own Ollam
 
 ```bash
 cp .env.example .env  # only if .env does not already exist
-# Edit .env as needed, then:
+# Set a private random GRAFANA_ADMIN_PASSWORD in .env; the example is only a placeholder.
+# Edit the remaining settings as needed, then:
 docker compose up -d --build
 docker compose exec backend python -m app.rag.ingest
 ```
@@ -51,4 +70,21 @@ The backend waits for model initialization, and frontend startup waits for backe
 
 The manifests contain Ollama, ChromaDB, backend and frontend services plus their configuration and volumes. Monitoring endpoints referenced by the configuration must be provisioned separately. The nightly drift CronJob uses shared configuration and a writable telemetry PVC. Choose storage that supports the cluster's scheduling and single-writer SQLite requirements.
 
-Local storage keys, database tables, `compliance_docs`, and `ccrag_*` Prometheus metrics retain their names for compatibility. The new namespace is intended for fresh deployments; do not change an existing cluster namespace without migrating its persistent volumes.
+The current storage namespace uses `aegis_rag_conversations`, `aegis_rag_active_conversation`, and the `aegis_rag_documents` collection. Metrics use `aegis_rag_*`; database tables and message IDs remain unchanged. Existing installations must migrate browser data and collections before switching versions. Normal rollback is limited to versions using this namespace; restoring an earlier namespace requires its paired application and data archive. Do not change an existing cluster namespace without migrating its persistent volumes.
+
+## One-time browser storage migration
+
+Before upgrading an existing installation, close its other browser tabs and open
+`/storage-migration.html` on each previously used origin (including the native and
+container ports, and each hostname). Enter the two source keys from the private
+migration inventory. The application itself does not read any prior namespace.
+
+The utility exports a JSON snapshot of both source and destination keys. Save it
+in the private migration archive, then select that exact file on the page to
+verify the saved backup before enabling migration. The page displays only counts
+and status, not chat contents. A destination conflict or a concurrent change stops
+the operation without overwriting either copy. After writing and reading back
+both destinations, the utility removes the corresponding source keys. Repeating
+a completed migration is harmless; an interrupted operation can be retried after
+checking storage access. The downloaded backup contains private conversations
+and must never be committed or uploaded with project materials.

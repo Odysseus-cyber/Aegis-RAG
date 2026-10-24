@@ -193,7 +193,7 @@ Services started:
 - `frontend` → http://localhost:5173
 - `chromadb` → http://localhost:8001
 - `prometheus` → http://localhost:9090
-- `grafana` → http://localhost:3000 (admin/admin)
+- `grafana` → http://localhost:3000 (use the private password configured in .env)
 - `pushgateway` → http://localhost:9091
 
 Navigate to http://localhost:5173. On first conversation, choose which documents to search (or search all). Ask away.
@@ -213,7 +213,7 @@ The chosen scope is shown as a persistent badge in the chat header and stored in
 
 ## Monitoring
 
-Prometheus collects live request, latency, retrieval, PII, and feedback metrics. Grafana separates application performance from model quality, with existing `ccrag_*` metric identifiers preserved.
+Prometheus collects live request, latency, retrieval, PII, and feedback metrics. Grafana separates application performance from model quality, using `aegis_rag_*` metrics and Aegis-RAG dashboard UIDs. Existing deployments require a one-time storage migration before upgrading; database tables and message IDs remain unchanged.
 
 The drift job compares the current 24 hours with a frozen preceding 7-day window. Statistical checks require at least 10 valid samples in each window. It backfills answer embeddings and evaluates up to 10 answers using real retrieved text and local Gemma. Scores, sample counts, status, and execution time are published together; unavailable data is visibly distinct from a passing result.
 
@@ -266,7 +266,7 @@ CHROMA_LOCAL_PATH=.chroma          # only used when CHROMA_MODE=local
 CHROMA_HOST=localhost              # only used when CHROMA_MODE=http
 CHROMA_PORT=8001                   # only used when CHROMA_MODE=http
 CHROMA_AUTH_TOKEN=                 # optional bearer token for ChromaDB
-CHROMA_COLLECTION=compliance_docs
+CHROMA_COLLECTION=aegis_rag_documents
 
 # Telemetry
 TELEMETRY_DB_PATH=telemetry.db
@@ -288,7 +288,7 @@ FRONTEND_ORIGIN=http://localhost:5173
 | `CHROMA_HOST` | `localhost` | `chromadb` | ChromaDB host (http mode only) |
 | `CHROMA_PORT` | `8001` | `8000` | ChromaDB port (http mode only) |
 | `CHROMA_AUTH_TOKEN` | _(empty)_ | _(empty)_ | Optional ChromaDB bearer token |
-| `CHROMA_COLLECTION` | `compliance_docs` | `compliance_docs` | ChromaDB collection name |
+| `CHROMA_COLLECTION` | `aegis_rag_documents` | `aegis_rag_documents` | ChromaDB collection name |
 | `TELEMETRY_DB_PATH` | `telemetry.db` | `/telemetry/telemetry.db` | SQLite telemetry DB path |
 | `LOG_LEVEL` | `INFO` | `INFO` | Python logging level |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | your domain | CORS allowed origin |
@@ -373,7 +373,7 @@ Aegis-RAG/
 │   ├── conversation.py       # conversation state + SQLite persistence
 │   ├── pii.py                # Presidio PII masking
 │   ├── llm.py                # async Ollama streaming client
-│   ├── metrics.py            # ccrag_* Prometheus metrics
+│   ├── metrics.py            # aegis_rag_* Prometheus metrics
 │   ├── rag/
 │   │   ├── ingest.py         # PDF → chunks → ChromaDB → llms-txt
 │   │   ├── chunking.py       # section-aware chunker
