@@ -13,7 +13,7 @@ export function DocumentBadge({ docFilter }: DocumentBadgeProps) {
         : `${docFilter.length} documents`;
 
   return (
-    <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
+    <span title={label} className="min-w-0 max-w-full truncate rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
       {label}
     </span>
   );

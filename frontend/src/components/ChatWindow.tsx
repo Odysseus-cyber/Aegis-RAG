@@ -7,6 +7,7 @@ import type { Citation, Conversation, FeedbackRating, Message, MessagePatch } fr
 
 interface ChatWindowProps {
   conversation: Conversation;
+  onNewChat?: () => void;
   onAddMessage: (conversationId: string, message: Message) => void;
   onUpdateMessage: (conversationId: string, messageId: string, patch: MessagePatch) => void;
   onFeedback: (conversationId: string, messageId: string, rating: FeedbackRating) => void;
@@ -17,6 +18,7 @@ export function ChatWindow({
   onAddMessage,
   onUpdateMessage,
   onFeedback,
+  onNewChat,
 }: ChatWindowProps) {
   const handleAssistantStart = useCallback(
     (messageId: string) => {
@@ -79,10 +81,20 @@ export function ChatWindow({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
-        <h1 className="text-sm font-semibold text-gray-800">Aegis-RAG</h1>
-        <DocumentBadge docFilter={conversation.docFilter} />
-      </div>
+      <header className="flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-2">
+        <h1 className="shrink-0 text-sm font-semibold text-gray-800">Aegis-RAG</h1>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+          <DocumentBadge docFilter={conversation.docFilter} />
+          {onNewChat && (
+            <button
+              onClick={onNewChat}
+              className="min-h-[44px] shrink-0 rounded-lg bg-white px-3 py-2 text-xs font-medium text-gray-600 ring-1 ring-gray-200 hover:bg-gray-50"
+            >
+              New chat
+            </button>
+          )}
+        </div>
+      </header>
 
       {/* Messages */}
       <MessageList

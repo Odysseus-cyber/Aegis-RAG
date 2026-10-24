@@ -27,18 +27,6 @@ export default function App() {
 
   return (
     <div className="flex h-dvh flex-col bg-gray-100">
-      {/* New conversation button */}
-      {active && !showScopeModal && (
-        <div className="absolute right-4 top-3 z-10">
-          <button
-            onClick={handleNewConversation}
-            className="min-h-[44px] rounded-lg bg-white px-3 py-2 text-xs font-medium text-gray-600 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50"
-          >
-            New chat
-          </button>
-        </div>
-      )}
-
       {showScopeModal && <ScopeModal onStart={handleStart} />}
 
       <div className="min-h-0 flex-1">
@@ -48,6 +36,7 @@ export default function App() {
             onAddMessage={addMessage}
             onUpdateMessage={updateMessage}
             onFeedback={setFeedback}
+            onNewChat={showScopeModal ? undefined : handleNewConversation}
           />
         )}
       </div>

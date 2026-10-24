@@ -72,3 +72,21 @@ it("restores interrupted localStorage messages without locking the input", () =>
   expect(screen.getByRole("alert").textContent).toContain("interrupted");
   expect((screen.getByRole("textbox") as HTMLTextAreaElement).disabled).toBe(false);
 });
+
+
+it("groups document scope and the new chat action in the chat header", () => {
+  const onNewChat = vi.fn();
+  render(<ChatWindow
+    conversation={{ id: "conv", docFilter: ["A long selected policy document.pdf"], messages: [], createdAt: "2026-01-01" }}
+    onAddMessage={vi.fn()}
+    onUpdateMessage={vi.fn()}
+    onFeedback={vi.fn()}
+    onNewChat={onNewChat}
+  />);
+  const button = screen.getByRole("button", { name: "New chat" });
+  const badge = screen.getByText("A long selected policy document.pdf");
+  expect(button.closest("header")).toBe(badge.closest("header"));
+  expect(badge.getAttribute("title")).toBe("A long selected policy document.pdf");
+  fireEvent.click(button);
+  expect(onNewChat).toHaveBeenCalledOnce();
+});
