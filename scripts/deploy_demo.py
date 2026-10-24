@@ -207,6 +207,10 @@ def collect_logs(record):
 
 def activate(record):
     compose(record['config'], 'up', '-d', '--wait', '--wait-timeout', '240', '--remove-orphans')
+    # Nginx resolves the backend name at startup. A backend recreation can change
+    # its Docker IP while Compose leaves the unchanged frontend running.
+    compose(record['config'], 'restart', 'frontend')
+    wait_http(API + '/health')
 
 
 def restore(record):

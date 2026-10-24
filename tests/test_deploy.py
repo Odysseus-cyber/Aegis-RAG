@@ -179,3 +179,15 @@ def test_service_readiness_retries_startup_connection_failure(monkeypatch):
     deploy.wait_http('http://localhost/health')
     assert request.call_count == 2
     request.assert_called_with('http://localhost/health', timeout=5)
+
+
+def test_activate_refreshes_proxy_after_backend_ready_and_waits_for_http(monkeypatch):
+    calls = []
+    monkeypatch.setattr(deploy, 'compose', lambda *args, **kwargs: calls.append(('compose', args)))
+    monkeypatch.setattr(deploy, 'wait_http', lambda url: calls.append(('health', url)))
+    deploy.activate({'config': 'release.json'})
+    assert calls == [
+        ('compose', ('release.json', 'up', '-d', '--wait', '--wait-timeout', '240', '--remove-orphans')),
+        ('compose', ('release.json', 'restart', 'frontend')),
+        ('health', deploy.API + '/health'),
+    ]
