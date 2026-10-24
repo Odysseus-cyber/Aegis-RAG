@@ -6,6 +6,37 @@ Aegis-RAG 是一个本地 PDF 问答应用：选择文档、多轮流式回答�
 
 基于 [ComplianceCheckRAG](https://github.com/jingyiyanlol/ComplianceCheckRAG) 改造，保留原项目来源与贡献者署名。原源码未附许可证，本次改名不新增许可声明。完整说明见 [架构与功能](README_1.md)。
 
+## 运行截图
+
+以下截图采集于 2026-10-24，应用版本为 [`288f5852`](https://github.com/Odysseus-cyber/Aegis-RAG/commit/288f5852a94a353cedd017cdbfb87c7ac3a2b7fe)，使用 GHCR 发布镜像在本机运行。问答资料为专用合成测试 PDF。
+
+### 文档问答、引用与反馈
+
+选择文档后，由本机 Gemma 完成两轮流式问答；回答附带来源引用，反馈成功关联服务端消息，页面底部展示部署版本。
+
+![Aegis-RAG 实际运行：文档选择、两轮问答、引用、反馈与版本信息](docs/images/chat-demo.png)
+
+### 自动检查与镜像交付
+
+真实 [Actions 运行记录](https://github.com/Odysseus-cyber/Aegis-RAG/actions/runs/40065857226)：后端、前端及配置检查通过后，构建并发布三套双架构镜像，生成同一提交的交付清单。
+
+![GitHub Actions 成功运行：自动检查、三个镜像构建与统一发布](docs/images/ci-delivery.png)
+
+### 真实问答的质量评估
+
+Grafana 的 `real` 数据源展示实际模型回答的评估结果。本次忠实度均值为 0.865，回答相关性均值为 0.54，触发相关性告警；历史基线不足的统计项明确显示“数据不足”。评分是本机 Gemma 的 rubric 估计。
+
+![Grafana 真实评估：质量分数、相关性告警及基线数据不足状态](docs/images/grafana-real.png)
+
+<details>
+<summary>展开查看：合成数据的漂移告警演示</summary>
+
+以下使用独立的 `synthetic_demo` 数据源验证告警展示，不代表真实模型表现，也不写入真实聊天数据库。
+
+![Grafana 合成告警演示：质量、检索、长度、向量和反馈指标触发告警](docs/images/grafana-demo-alert.png)
+
+</details>
+
 ## 本机开发
 
 需要 Python 3.11、Node 24、Docker Desktop（仅容器演示需要）和 Ollama。这台 Mac 已在 `.runtime/` 准备独立 Python/Node，Makefile 自动使用；新机器可使用系统安装的对应版本。
@@ -80,4 +111,4 @@ docker compose -f docker-compose.release.yml config --quiet
 
 改名保留 `ccrag_*` 指标、既有 localStorage 键、`compliance_docs` 集合及数据库表结构。前端 parser 6.1.5 已包含官方安全回补；此前 `npm audit` 的版本范围仍报告三项中等告警，未通过忽略规则隐藏。
 
-本机运行环境、原项目修复前源码及索引备份均保存在被 Git 排除的 `.runtime/`。所有构建日志、截图、运行报告保存在 `.runtime/aegis-acceptance/`，不随公开源码上传。
+本机运行环境、原项目修复前源码及索引备份均保存在被 Git 排除的 `.runtime/`。README 使用的专用演示截图保存在 `docs/images/`；其余构建日志、验收截图及运行报告保存在 `.runtime/`，不随公开源码上传。
