@@ -33,7 +33,7 @@ make evaluate-demo
 make rollback-demo
 ```
 
-发布脚本使用同一清单中的三个镜像，不在本机重建源码；部署前检查 OCI 提交信息与容器到 Ollama 的连接。首次 GHCR 发布后，需在 GitHub 包设置中将 backend、frontend、drift 三个包设为公开，才能匿名拉取。也可使用用户自行配置的 Docker 登录。
+发布脚本使用同一清单中的三个镜像，不在本机重建源码；部署前检查 OCI 提交信息与容器到 Ollama 的连接。部署前会验证 GHCR 下载权限；本仓库已发布的镜像支持匿名拉取。如果在其他仓库首次发布时包默认为私有，需将三个包设为公开，或使用用户自行配置的 Docker 登录。
 
 - 应用：**http://127.0.0.1:15173**
 - Grafana：**http://127.0.0.1:13000**，本机演示账号 `admin`，密码 `aegis-local-demo`
