@@ -111,4 +111,4 @@ docker compose -f docker-compose.release.yml config --quiet
 
 当前版本使用 `aegis_rag_*` 指标、新会话存储键和 `aegis_rag_documents` 集合，数据库表结构与消息 ID 保持不变。已有部署需要先完成数据迁移；常规回滚仅适用于同一存储命名体系。前端 parser 6.1.5 已包含官方安全回补；此前 `npm audit` 的版本范围仍报告三项中等告警，未通过忽略规则隐藏。
 
-本机运行环境、原项目修复前源码及索引备份均保存在被 Git 排除的 `.runtime/`。README 使用的专用演示截图保存在 `docs/images/`；其余构建日志、验收截图及运行报告保存在 `.runtime/`，不随公开源码上传。
+当前运行环境及部署状态保存在被 Git 排除的 `.runtime/`。迁移前的源码、索引备份、监控历史与验收证据已保存到项目目录之外的私有归档。README 使用的专用演示截图保存在 `docs/images/`，保留其采集日期与历史版本；私有备份、聊天数据和验收原始记录不随公开源码上传。

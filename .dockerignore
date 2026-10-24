@@ -31,3 +31,6 @@ k8s/
 
 # Project-local runtimes and repair backup
 .runtime/
+
+# Local presentation materials are not published
+presentations/
