@@ -28,9 +28,9 @@ def prepare():
     config = json.loads(subprocess.check_output(
         ["docker", "compose", "config", "--format", "json"], cwd=ROOT,
     ))
-    config["name"] = "ccrag-validation"
+    config["name"] = "aegis-docker-validation"
     for name, network in config.get("networks", {}).items():
-        network["name"] = f"ccrag-validation_{name}"
+        network["name"] = f"aegis-docker-validation_{name}"
     for name, service in config["services"].items():
         for port in service.get("ports", []):
             port.update(published=str(PORTS[name]), host_ip="127.0.0.1")
