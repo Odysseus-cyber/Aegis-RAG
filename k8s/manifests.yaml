@@ -1,0 +1,254 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aegis-rag
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aegis-rag-config
+  namespace: aegis-rag
+data:
+  OLLAMA_BASE_URL: "http://ollama:11434"
+  LLM_MODEL: "gemma3:1b"
+  EMBED_MODEL: "nomic-embed-text"
+  CHROMA_MODE: "http"
+  CHROMA_HOST: "chromadb"
+  CHROMA_PORT: "8000"
+  CHROMA_COLLECTION: "compliance_docs"
+  TELEMETRY_DB_PATH: "/telemetry/telemetry.db"
+  LOG_LEVEL: "INFO"
+  PUSHGATEWAY_URL: "http://pushgateway:9091"
+  DRIFT_REPORT_PATH: "/telemetry/drift-report.json"
+  FRONTEND_ORIGIN: "http://frontend"
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: aegis-rag-secret
+  namespace: aegis-rag
+type: Opaque
+stringData:
+  CHROMA_AUTH_TOKEN: ""
+
+---
+# Persistent volume claims
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-pvc
+  namespace: aegis-rag
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chroma-pvc
+  namespace: aegis-rag
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: telemetry-pvc
+  namespace: aegis-rag
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+# Ollama
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: aegis-rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+        - name: ollama
+          image: ollama/ollama:0.7.0
+          ports:
+            - containerPort: 11434
+          volumeMounts:
+            - name: ollama-data
+              mountPath: /root/.ollama
+      volumes:
+        - name: ollama-data
+          persistentVolumeClaim:
+            claimName: ollama-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: aegis-rag
+spec:
+  selector:
+    app: ollama
+  ports:
+    - port: 11434
+      targetPort: 11434
+
+---
+# ChromaDB
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chromadb
+  namespace: aegis-rag
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chromadb
+  template:
+    metadata:
+      labels:
+        app: chromadb
+    spec:
+      containers:
+        - name: chromadb
+          image: chromadb/chroma:1.5.9
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ANONYMIZED_TELEMETRY
+              value: "false"
+            - name: CHROMA_PERSIST_PATH
+              value: /data
+          volumeMounts:
+            - name: chroma-data
+              mountPath: /data
+      volumes:
+        - name: chroma-data
+          persistentVolumeClaim:
+            claimName: chroma-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: chromadb
+  namespace: aegis-rag
+spec:
+  selector:
+    app: chromadb
+  ports:
+    - port: 8000
+      targetPort: 8000
+
+---
+# Backend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: aegis-rag
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: ghcr.io/odysseus-cyber/aegis-rag/backend:REPLACE_WITH_COMMIT_SHA
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: aegis-rag-config
+            - secretRef:
+                name: aegis-rag-secret
+          volumeMounts:
+            - name: telemetry
+              mountPath: /telemetry
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: telemetry
+          persistentVolumeClaim:
+            claimName: telemetry-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: aegis-rag
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+
+---
+# Frontend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: aegis-rag
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/odysseus-cyber/aegis-rag/frontend:REPLACE_WITH_COMMIT_SHA
+          ports:
+            - containerPort: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: aegis-rag
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    - port: 80
+      targetPort: 80

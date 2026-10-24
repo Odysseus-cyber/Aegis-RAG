@@ -1,0 +1,268 @@
+{
+  "title": "Aegis-RAG \u00b7 Model Quality",
+  "uid": "ccrag-model-quality",
+  "schemaVersion": 38,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "description": "Source real uses actual telemetry. synthetic_demo is an isolated deterministic fixture, not model evidence. Missing values are unavailable, not zero. Quality scores use an Ollama rubric, not DeepEval metric parity.",
+  "templating": {
+    "list": [
+      {
+        "name": "source",
+        "label": "Data source",
+        "type": "custom",
+        "query": "real,synthetic_demo",
+        "current": {
+          "text": "real",
+          "value": "real"
+        },
+        "options": [
+          {
+            "text": "real",
+            "value": "real",
+            "selected": true
+          },
+          {
+            "text": "synthetic_demo",
+            "value": "synthetic_demo",
+            "selected": false
+          }
+        ]
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Evaluation status \u00b7 0 passed / 1 alert / 2 insufficient data / 3 error",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Passed",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "Alert",
+                  "color": "orange"
+                },
+                "2": {
+                  "text": "Insufficient data",
+                  "color": "gray"
+                },
+                "3": {
+                  "text": "Execution error",
+                  "color": "red"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "ccrag_drift_status{source=~\"$source\"}",
+          "legendFormat": "{{metric_name}} {{window}}",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Quality scores \u00b7 local Gemma rubric estimates",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "ccrag_drift_value{source=~\"$source\",metric_name=~\"faithfulness_mean|answer_relevance_mean|context_precision_mean\"}",
+          "legendFormat": "{{metric_name}} {{window}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Retrieval KS p-value \u00b7 alert below 0.01",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "ccrag_drift_value{source=~\"$source\",metric_name=\"retrieval_ks_pvalue\"}",
+          "legendFormat": "{{metric_name}} {{window}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Response length PSI \u00b7 alert above 0.2",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 12,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "ccrag_drift_value{source=~\"$source\",metric_name=\"response_length_psi\"}",
+          "legendFormat": "{{metric_name}} {{window}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Embedding cosine similarity drop \u00b7 alert above 0.05",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 12,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "ccrag_drift_value{source=~\"$source\",metric_name=\"output_cosine_similarity_drop\"}",
+          "legendFormat": "{{metric_name}} {{window}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Feedback thumbs-down ratio",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 0,
+        "y": 19,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "ccrag_drift_value{source=~\"$source\",metric_name=\"feedback_thumbsdown_ratio\"}",
+          "legendFormat": "{{metric_name}} {{window}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Sample counts \u00b7 insufficient data is never a pass",
+      "type": "timeseries",
+      "gridPos": {
+        "x": 12,
+        "y": 19,
+        "w": 12,
+        "h": 7
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "ccrag_drift_samples{source=~\"$source\"}",
+          "legendFormat": "{{metric_name}} {{window}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Last evaluation age",
+      "type": "stat",
+      "gridPos": {
+        "x": 0,
+        "y": 26,
+        "w": 12,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "time() - ccrag_drift_run_timestamp_seconds{source=~\"$source\"}",
+          "legendFormat": "{{metric_name}} {{window}}",
+          "instant": true,
+          "range": false
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Evaluation duration",
+      "type": "stat",
+      "gridPos": {
+        "x": 12,
+        "y": 26,
+        "w": 12,
+        "h": 5
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "ccrag_drift_run_duration_seconds{source=~\"$source\"}",
+          "legendFormat": "{{metric_name}} {{window}}",
+          "instant": true,
+          "range": false
+        }
+      ]
+    }
+  ]
+}

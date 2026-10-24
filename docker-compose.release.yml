@@ -1,0 +1,81 @@
+name: aegis-demo
+x-app-env: &app-env
+  OLLAMA_BASE_URL: http://host.docker.internal:11434
+  LLM_MODEL: gemma3:1b
+  EMBED_MODEL: nomic-embed-text
+  CHROMA_MODE: http
+  CHROMA_HOST: chromadb
+  CHROMA_PORT: '8000'
+  TELEMETRY_DB_PATH: /app/telemetry/telemetry.db
+  PUSHGATEWAY_URL: http://pushgateway:9091
+  DATA_DIR: /app/data
+  LLMS_TXT_DIR: /app/llms-txt
+  FRONTEND_ORIGIN: http://127.0.0.1:15173
+services:
+  backend:
+    image: ${IMAGE_BACKEND:-ghcr.io/odysseus-cyber/aegis-rag/backend:development}
+    user: '${LOCAL_UID:-1000}:${LOCAL_GID:-1000}'
+    environment: *app-env
+    extra_hosts: ['host.docker.internal:host-gateway']
+    ports: ['127.0.0.1:18000:8000']
+    volumes:
+      - ${AEGIS_DATA:-./tests/fixtures}:/app/data:ro
+      - ${AEGIS_STATE:-./.runtime/aegis-demo}/llms-txt:/app/llms-txt
+      - ${AEGIS_STATE:-./.runtime/aegis-demo}/telemetry:/app/telemetry
+    depends_on:
+      chromadb: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'python', '-c', "import urllib.request; urllib.request.urlopen('http://localhost:8000/health',timeout=4)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+  frontend:
+    image: ${IMAGE_FRONTEND:-ghcr.io/odysseus-cyber/aegis-rag/frontend:development}
+    ports: ['127.0.0.1:15173:80']
+    depends_on:
+      backend: {condition: service_healthy}
+  chromadb:
+    image: chromadb/chroma:1.5.9
+    environment:
+      ANONYMIZED_TELEMETRY: 'false'
+      CHROMA_PERSIST_PATH: /data
+    ports: ['127.0.0.1:18001:8000']
+    volumes: ['${AEGIS_STATE:-./.runtime/aegis-demo}/chroma:/data']
+    healthcheck:
+      test: ['CMD', 'bash', '-c', 'timeout 4 bash -c "</dev/tcp/127.0.0.1/8000"']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+  prometheus:
+    image: prom/prometheus:v3.4.0
+    ports: ['127.0.0.1:19090:9090']
+    user: '${LOCAL_UID:-1000}:${LOCAL_GID:-1000}'
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${AEGIS_STATE:-./.runtime/aegis-demo}/prometheus:/prometheus
+  grafana:
+    image: grafana/grafana:11.6.1
+    ports: ['127.0.0.1:13000:3000']
+    user: '${LOCAL_UID:-1000}:${LOCAL_GID:-1000}'
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: aegis-local-demo
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ${AEGIS_STATE:-./.runtime/aegis-demo}/grafana:/var/lib/grafana
+    depends_on: [prometheus]
+  pushgateway:
+    image: prom/pushgateway:v1.11.1
+    ports: ['127.0.0.1:19091:9091']
+  drift-job:
+    image: ${IMAGE_DRIFT:-ghcr.io/odysseus-cyber/aegis-rag/drift:development}
+    profiles: [drift]
+    user: '${LOCAL_UID:-1000}:${LOCAL_GID:-1000}'
+    environment: *app-env
+    extra_hosts: ['host.docker.internal:host-gateway']
+    volumes:
+      - ${AEGIS_STATE:-./.runtime/aegis-demo}/telemetry:/app/telemetry
+      - ${AEGIS_STATE:-./.runtime/aegis-demo}/reports:/app/reports
+    depends_on: [chromadb, pushgateway]
