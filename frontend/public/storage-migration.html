@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Aegis-RAG · 会话存储迁移</title>
+  <style>
+    body { font: 16px/1.6 system-ui, sans-serif; color: #17334a; background: #f3f7fa; margin: 0; }
+    main { max-width: 720px; margin: 40px auto; padding: 28px; background: white; border-radius: 16px; }
+    label { display: block; margin: 18px 0; } input[type=text] { display:block; width: 95%; padding: 10px; }
+    button { padding: 10px 18px; margin: 8px 8px 8px 0; cursor: pointer; }
+    #status { white-space: pre-wrap; background: #eaf3f7; padding: 16px; } .note { color: #536978; }
+  </style>
+</head>
+<body><main>
+  <h1>Aegis-RAG 会话存储迁移</h1>
+  <p>请先关闭此浏览器内所有正在使用本应用的其他标签页。每个浏览器和 origin 需要分别处理。</p>
+  <p class="note">当前 origin：<strong id="origin"></strong>。本页仅访问浏览器本地存储；备份文件含聊天数据，请保存在私有归档中，不上传仓库。</p>
+  <label>源会话列表键<input id="source-conversations" type="text" autocomplete="off"></label>
+  <label>源当前会话键<input id="source-active" type="text" autocomplete="off"></label>
+  <button id="inspect">1. 检查并导出备份</button>
+  <label>2. 选择刚刚保存的 JSON 备份以验证<input id="backup" type="file" accept=".json,application/json" disabled></label>
+  <button id="migrate" disabled>3. 迁移并核对</button>
+  <p id="status" role="status" aria-live="polite">等待输入源键。目标键使用 Aegis-RAG 命名体系；冲突时不覆盖。</p>
+</main>
+<script type="module" src="./storage-migration-ui.mjs"></script></body></html>

@@ -328,15 +328,15 @@ CREATE TABLE baseline_snapshots (
 ### Layer 1: App performance (Prometheus, real-time)
 
 Metrics exposed at `/metrics` — standard FastAPI instrumentation plus custom:
-- `ccrag_query_total` (counter, label: status)
-- `ccrag_query_latency_seconds` (histogram)
-- `ccrag_retrieval_latency_seconds` (histogram)
-- `ccrag_llm_latency_seconds` (histogram)
-- `ccrag_chunks_retrieved` (histogram)
-- `ccrag_pii_hits_total` (counter, label: entity_type)
-- `ccrag_conversation_turns` (histogram)
-- `ccrag_feedback_total` (counter, label: rating)
-- `ccrag_drift_breach` (gauge, label: metric_name) — set by drift job via Prometheus Pushgateway
+- `aegis_rag_query_total` (counter, label: status)
+- `aegis_rag_query_latency_seconds` (histogram)
+- `aegis_rag_retrieval_latency_seconds` (histogram)
+- `aegis_rag_llm_latency_seconds` (histogram)
+- `aegis_rag_chunks_retrieved` (histogram)
+- `aegis_rag_pii_hits_total` (counter, label: entity_type)
+- `aegis_rag_conversation_turns` (histogram)
+- `aegis_rag_feedback_total` (counter, label: rating)
+- `aegis_rag_drift_breach` (gauge, label: metric_name) — set by drift job via Prometheus Pushgateway
 
 ### Layer 2: Per-event telemetry (SQLite, every request)
 

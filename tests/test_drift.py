@@ -135,8 +135,8 @@ def test_missing_db_and_write_failure_are_errors(drift_db, monkeypatch):
 def test_push_replaces_group_and_omits_stale_scores(monkeypatch):
     report = build_report("error")
     text = metrics_text(report)
-    assert 'ccrag_drift_status{metric_name="execution"} 3' in text
-    assert not any(line.startswith("ccrag_drift_value{") for line in text.splitlines())
+    assert 'aegis_rag_drift_status{metric_name="execution"} 3' in text
+    assert not any(line.startswith("aegis_rag_drift_value{") for line in text.splitlines())
     import monitoring.drift_job.run_drift as runner
     urlopen = MagicMock()
     monkeypatch.setattr(runner, "urlopen", urlopen)

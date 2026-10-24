@@ -13,13 +13,24 @@ sys.path.insert(0, str(SCRIPTS))
 spec = importlib.util.spec_from_file_location('deploy_demo', SCRIPTS / 'deploy_demo.py')
 deploy = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(deploy)
-from release_manifest import IMAGE_ROOT, assemble, validate_manifest  # noqa: E402
+from release_manifest import (  # noqa: E402
+    IMAGE_ROOT,
+    STORAGE_NAMESPACE,
+    assemble,
+    validate_manifest,
+)
 
 
 def manifest():
-    return {'schema_version': 1, 'commit_sha': 'a' * 40, 'images': {
+    return {'schema_version': 1, 'storage_namespace': STORAGE_NAMESPACE, 'commit_sha': 'a' * 40, 'images': {
         name: {'image': f'{IMAGE_ROOT}/{name}', 'digest': 'sha256:' + '1' * 64}
         for name in ('backend', 'frontend', 'drift')}}
+
+
+def record(config='new', sha='a' * 40):
+    value = manifest()
+    value['commit_sha'] = sha
+    return {'config': config, 'manifest': value, 'storage_namespace': STORAGE_NAMESPACE}
 
 
 def test_manifest_requires_complete_matching_set(tmp_path):
@@ -83,50 +94,50 @@ def operations(monkeypatch, tmp_path):
 
 def test_success_promotes_only_after_verification_and_evaluation_does_not_block(operations, monkeypatch):
     calls, state = operations
-    previous, candidate = {'config': 'old'}, {'config': 'new'}
+    previous, candidate = record('old', 'b' * 40), record('new')
     monkeypatch.setattr(deploy, 'evaluate', lambda record: 2)
-    deploy.deploy(candidate, previous)
+    deploy.commit_state(previous, None)
+    deploy.deploy(candidate)
     assert [name for name, _ in calls] == ['preflight', 'activate', 'verify']
-    assert json.loads((state / 'current.json').read_text()) == candidate
-    assert json.loads((state / 'previous.json').read_text()) == previous
+    assert json.loads((state / 'state.json').read_text())['current'] == candidate
+    assert json.loads((state / 'state.json').read_text())['previous'] == previous
 
 
 def test_failed_verify_restores_previous_without_promoting(operations, monkeypatch):
     calls, state = operations
-    previous, candidate = {'config': 'old'}, {'config': 'new'}
-    deploy.save(state / 'current.json', previous)
+    previous, candidate = record('old', 'b' * 40), record('new')
+    deploy.commit_state(previous, None)
     monkeypatch.setattr(deploy, 'verify', lambda record: (_ for _ in ()).throw(RuntimeError('failed')))
     with pytest.raises(RuntimeError, match='failed'):
-        deploy.deploy(candidate, previous)
+        deploy.deploy(candidate)
     assert calls[-1] == ('restore', previous)
-    assert json.loads((state / 'current.json').read_text()) == previous
+    assert json.loads((state / 'state.json').read_text())['current'] == previous
 
 
 def test_preflight_failure_leaves_running_release_untouched(operations, monkeypatch):
     calls, state = operations
     monkeypatch.setattr(deploy, 'preflight', lambda record: (_ for _ in ()).throw(RuntimeError('download')))
     with pytest.raises(RuntimeError, match='download'):
-        deploy.deploy({'config': 'new'}, {'config': 'old'})
+        deploy.deploy(record('new'))
     assert calls == []
-    assert not (state / 'current.json').exists()
+    assert not (state / 'state.json').exists()
 
 
 def test_first_deployment_failure_stops_services_without_deleting_volumes(operations, monkeypatch):
     calls, state = operations
     monkeypatch.setattr(deploy, 'verify', lambda record: (_ for _ in ()).throw(RuntimeError('failed')))
     with pytest.raises(RuntimeError):
-        deploy.deploy({'config': 'new'})
+        deploy.deploy(record('new'))
     assert calls[-1] == ('compose', ('new', 'down'))
-    assert not (state / 'current.json').exists()
+    assert not (state / 'state.json').exists()
 
 
 def test_manual_rollback_swaps_verified_records(operations):
     _, state = operations
-    deploy.save(state / 'current.json', {'config': 'new'})
-    deploy.save(state / 'previous.json', {'config': 'old'})
+    deploy.commit_state(record('new'), record('old', 'b' * 40))
     deploy.rollback()
-    assert json.loads((state / 'current.json').read_text()) == {'config': 'old'}
-    assert json.loads((state / 'previous.json').read_text()) == {'config': 'new'}
+    assert json.loads((state / 'state.json').read_text())['current'] == record('old', 'b' * 40)
+    assert json.loads((state / 'state.json').read_text())['previous'] == record('new')
 
 
 def test_preflight_rejects_wrong_oci_revision_before_starting(monkeypatch):
@@ -137,18 +148,18 @@ def test_preflight_rejects_wrong_oci_revision_before_starting(monkeypatch):
     monkeypatch.setattr(deploy, 'command', lambda *args, **kwargs: SimpleNamespace(
         stdout=json.dumps([{'Config': {'Labels': {'org.opencontainers.image.revision': 'b' * 40}}}])))
     with pytest.raises(RuntimeError, match='OCI revision'):
-        deploy.preflight({'config': 'candidate', 'manifest': manifest()})
+        deploy.preflight(record('candidate'))
     assert calls == [('candidate', '--profile', 'drift', 'pull', '--policy', 'missing')]
 
 
 def test_redeploy_same_commit_preserves_last_distinct_version(operations):
     _, state = operations
-    old = {'config': 'older', 'manifest': {'commit_sha': 'b' * 40}}
-    same = {'config': 'same', 'manifest': manifest()}
-    candidate = {'config': 'candidate', 'manifest': manifest()}
-    deploy.save(state / 'previous.json', old)
-    deploy.deploy(candidate, same)
-    assert json.loads((state / 'previous.json').read_text()) == old
+    old = record('older', 'b' * 40)
+    same = record('same')
+    candidate = record('candidate')
+    deploy.commit_state(same, old)
+    deploy.deploy(candidate)
+    assert json.loads((state / 'state.json').read_text())['previous'] == old
 
 
 def test_demo_filter_uses_ingestion_document_stem(monkeypatch):
@@ -185,7 +196,7 @@ def test_activate_refreshes_proxy_after_backend_ready_and_waits_for_http(monkeyp
     calls = []
     monkeypatch.setattr(deploy, 'compose', lambda *args, **kwargs: calls.append(('compose', args)))
     monkeypatch.setattr(deploy, 'wait_http', lambda url: calls.append(('health', url)))
-    deploy.activate({'config': 'release.json'})
+    deploy.activate(record('release.json'))
     assert calls == [
         ('compose', ('release.json', 'up', '-d', '--wait', '--wait-timeout', '240', '--remove-orphans')),
         ('compose', ('release.json', 'restart', 'frontend')),
@@ -276,3 +287,192 @@ def test_download_rejects_silent_short_body(tmp_path, monkeypatch):
     assert len(calls) == 3
     assert not destination.exists()
     assert not destination.with_name(destination.name + '.part').exists()
+
+
+@pytest.mark.parametrize('namespace', [None, 'obsolete-namespace'])
+def test_manifest_rejects_missing_or_different_storage_namespace(namespace):
+    value = manifest()
+    if namespace is None:
+        value.pop('storage_namespace')
+    else:
+        value['storage_namespace'] = namespace
+    with pytest.raises(ValueError, match='storage namespace'):
+        validate_manifest(value)
+
+
+def test_assembled_manifest_declares_storage_namespace(tmp_path):
+    for name, image in manifest()['images'].items():
+        (tmp_path / f'{name}.json').write_text(json.dumps(image))
+    value = assemble(tmp_path, 'a' * 40, 'https://example.com/run')
+    assert value['storage_namespace'] == STORAGE_NAMESPACE
+
+
+@pytest.mark.parametrize('target', ['candidate', 'previous'])
+@pytest.mark.parametrize('location', ['record', 'manifest'])
+@pytest.mark.parametrize('namespace', [None, 'obsolete-namespace'])
+def test_deploy_rejects_incompatible_state_before_preflight(operations, target, location, namespace):
+    calls, state = operations
+    candidate, previous = record('new'), record('old', 'b' * 40)
+    value = candidate if target == 'candidate' else previous
+    subject = value if location == 'record' else value['manifest']
+    if namespace is None:
+        subject.pop('storage_namespace')
+    else:
+        subject['storage_namespace'] = namespace
+    deploy.commit_state(previous, None)
+    before = (state / 'state.json').read_bytes()
+    with pytest.raises(ValueError, match='storage namespace'):
+        deploy.deploy(candidate)
+    assert not calls
+    assert (state / 'state.json').read_bytes() == before
+
+
+@pytest.mark.parametrize('target', ['current', 'previous'])
+def test_rollback_rejects_incompatible_records_before_service_changes(operations, target):
+    calls, state = operations
+    records = {'current': record('new'), 'previous': record('old', 'b' * 40)}
+    records[target]['manifest'].pop('storage_namespace')
+    deploy.commit_state(records['current'], records['previous'])
+    with pytest.raises(ValueError, match='storage namespace'):
+        deploy.rollback()
+    assert not calls
+    for name, value in records.items():
+        assert json.loads((state / 'state.json').read_text())[name] == value
+
+
+def test_first_new_namespace_release_has_no_ordinary_rollback(operations):
+    calls, state = operations
+    deploy.deploy(record('new'))
+    calls.clear()
+    with pytest.raises(ValueError, match='first migrated release'):
+        deploy.rollback()
+    assert not calls
+
+
+@pytest.mark.parametrize('legacy_file', ['current.json', 'previous.json'])
+def test_first_release_rejects_legacy_deployment_state(operations, legacy_file):
+    calls, state = operations
+    deploy.save(state / legacy_file, {'config': 'archive-only'})
+    with pytest.raises(ValueError, match='Legacy deployment state'):
+        deploy.deploy(record('new'))
+    assert not calls
+    assert (state / legacy_file).exists()
+    assert not (state / 'state.json').exists()
+
+
+def test_log_collection_failure_still_restores_previous(operations, monkeypatch):
+    calls, state = operations
+    previous = record('old', 'b' * 40)
+    deploy.commit_state(previous, None)
+    monkeypatch.setattr(deploy, 'verify', lambda value: (_ for _ in ()).throw(RuntimeError('acceptance failed')))
+    monkeypatch.setattr(deploy, 'collect_logs', lambda value: (_ for _ in ()).throw(OSError('no logs')))
+    with pytest.raises(RuntimeError, match='acceptance failed'):
+        deploy.deploy(record('new'))
+    assert calls[-1] == ('restore', previous)
+    assert json.loads((state / 'state.json').read_text())['current'] == previous
+
+
+def test_failed_manual_rollback_restores_current_and_keeps_records(operations, monkeypatch):
+    calls, state = operations
+    candidate, previous = record('new'), record('old', 'b' * 40)
+    deploy.commit_state(candidate, previous)
+    monkeypatch.setattr(deploy, 'verify', lambda value: (_ for _ in ()).throw(RuntimeError('acceptance failed')))
+    with pytest.raises(RuntimeError, match='acceptance failed'):
+        deploy.rollback()
+    assert calls == [('restore', previous), ('restore', candidate)]
+    assert json.loads((state / 'state.json').read_text())['current'] == candidate
+    assert json.loads((state / 'state.json').read_text())['previous'] == previous
+
+
+def test_incompatible_release_download_never_creates_data_directories(tmp_path, monkeypatch):
+    monkeypatch.setattr(deploy, 'STATE', tmp_path)
+    downloads = []
+
+    def download(url, destination):
+        downloads.append(url)
+        value = manifest()
+        value.pop('storage_namespace')
+        destination.write_text(json.dumps(value))
+
+    monkeypatch.setattr(deploy, 'download', download)
+    monkeypatch.setattr(deploy, 'compose', lambda *args, **kwargs: pytest.fail('must not call compose'))
+    with pytest.raises(ValueError, match='storage namespace'):
+        deploy.prepare('a' * 40)
+    assert len(downloads) == 1
+    assert {path.name for path in tmp_path.iterdir() if path.is_dir()} == {'releases'}
+
+
+@pytest.mark.parametrize('has_previous', [False, True])
+def test_deployment_state_commit_failure_restores_service_and_old_state(operations, monkeypatch, has_previous):
+    calls, state = operations
+    previous = record('old', 'b' * 40)
+    if has_previous:
+        deploy.commit_state(previous, record('older', 'c' * 40))
+    original = (state / 'state.json').read_bytes() if has_previous else None
+    replace = Path.replace
+
+    def fail_state_replace(path, target):
+        if Path(target) == state / 'state.json':
+            raise OSError('state disk failure')
+        return replace(path, target)
+
+    monkeypatch.setattr(Path, 'replace', fail_state_replace)
+    with pytest.raises(OSError, match='state disk failure'):
+        deploy.deploy(record('new'))
+    if has_previous:
+        assert calls[-1] == ('restore', previous)
+        assert (state / 'state.json').read_bytes() == original
+    else:
+        assert calls[-1] == ('compose', ('new', 'down'))
+        assert not (state / 'state.json').exists()
+    assert not any(name == 'evaluate' for name, _ in calls)
+
+
+def test_rollback_state_commit_failure_restores_service_and_both_records(operations, monkeypatch):
+    calls, state = operations
+    active, previous = record('new'), record('old', 'b' * 40)
+    deploy.commit_state(active, previous)
+    original = (state / 'state.json').read_bytes()
+    replace = Path.replace
+
+    def fail_state_replace(path, target):
+        if Path(target) == state / 'state.json':
+            raise OSError('state disk failure')
+        return replace(path, target)
+
+    monkeypatch.setattr(Path, 'replace', fail_state_replace)
+    with pytest.raises(OSError, match='state disk failure'):
+        deploy.rollback()
+    assert calls == [('restore', previous), ('verify', previous), ('restore', active)]
+    assert (state / 'state.json').read_bytes() == original
+
+
+def test_grafana_password_is_private_random_reused_and_never_printed(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(deploy, 'STATE', tmp_path)
+    password = deploy.grafana_password()
+    path = tmp_path / 'grafana-admin-password'
+    assert len(password) >= 40
+    assert path.read_text().strip() == password
+    assert path.stat().st_mode & 0o777 == 0o600
+    path.chmod(0o644)
+    assert deploy.grafana_password() == password
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert capsys.readouterr() == ('', '')
+
+
+def test_empty_existing_grafana_password_is_not_silently_replaced(tmp_path, monkeypatch):
+    monkeypatch.setattr(deploy, 'STATE', tmp_path)
+    path = tmp_path / 'grafana-admin-password'
+    path.write_text('')
+    with pytest.raises(ValueError, match='password file is empty'):
+        deploy.grafana_password()
+    assert path.read_text() == ''
+
+
+def test_generated_compose_and_state_files_are_private(tmp_path):
+    path = tmp_path / 'compose.json'
+    deploy.save(path, {'services': {}})
+    assert path.stat().st_mode & 0o777 == 0o600
+    path.chmod(0o644)
+    deploy.save(path, {'services': {}})
+    assert path.stat().st_mode & 0o777 == 0o600

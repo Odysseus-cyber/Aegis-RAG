@@ -49,6 +49,6 @@ make evaluate-demo
 make rollback-demo  # 需要已有上一套验证成功的不同版本
 ```
 
-应用：`http://127.0.0.1:15173`。Grafana：`http://127.0.0.1:13000`，本机演示账号 `admin` / `aegis-local-demo`。原生应用 `5173` 保留。Kubernetes 示例未实际部署。
+应用：`http://127.0.0.1:15173`。Grafana：`http://127.0.0.1:13000`，本机演示账号 `admin`；部署时生成的随机密码保存在本地私有文件 `.runtime/aegis-demo/grafana-admin-password`。不要提交或分享该文件。原生应用 `5173` 保留。Kubernetes 示例未实际部署。
 
 本机报告与浏览器截图保存在 `.runtime/aegis-release-acceptance/`；运行数据与截图不纳入公开仓库。本文记录首次正式发布的结果，后续升级与回滚记录保存在同一验收目录。

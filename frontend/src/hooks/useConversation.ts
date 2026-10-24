@@ -2,8 +2,8 @@ import { useCallback } from "react";
 import type { Conversation, DocumentScope, Message, MessagePatch, FeedbackRating } from "../types";
 import { useLocalStorage } from "./useLocalStorage";
 
-const STORAGE_KEY = "ccrag_conversations";
-const ACTIVE_KEY = "ccrag_active_conversation";
+const STORAGE_KEY = "aegis_rag_conversations";
+const ACTIVE_KEY = "aegis_rag_active_conversation";
 
 function newConversation(docFilter: DocumentScope): Conversation {
   return {

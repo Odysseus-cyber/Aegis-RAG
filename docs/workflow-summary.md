@@ -16,7 +16,7 @@ npm run lint
 npm run build
 ```
 
-Keep `.env`, PDFs, model files, databases, local indexes, backups and `.runtime` out of Git. Dedicated synthetic test fixtures belong in `tests/`. Existing `ccrag_*` storage and metric names and the `compliance_docs` collection remain compatible.
+Keep `.env`, PDFs, model files, databases, local indexes, backups and `.runtime` out of Git. Dedicated synthetic test fixtures belong in `tests/`. Current metric names use `aegis_rag_*`, browser storage uses the Aegis-RAG namespace, and Chroma uses `aegis_rag_documents`. Migrate existing data before upgrading; preserve historical records in a private archive and restrict normal rollback to compatible storage versions.
 
 ## Unified CI
 

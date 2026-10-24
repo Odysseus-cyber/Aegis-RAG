@@ -1,6 +1,6 @@
 # Aegis-RAG monitoring
 
-Prometheus records application latency, token and feedback counters; Grafana provisions application performance and model quality dashboards. Existing `ccrag_*` metric names and dashboard UIDs remain compatible.
+Prometheus records application latency, token and feedback counters; Grafana provisions application performance and model quality dashboards. Metrics use `aegis_rag_*`; dashboard UIDs are `aegis-rag-app-perf` and `aegis-rag-model-quality`. Archive prior monitoring storage before starting a fresh namespace. Historical samples are not relabelled as current-version observations; insufficient history remains an explicit state.
 
 ## Run a real evaluation
 
@@ -40,11 +40,11 @@ The JSON report includes exact windows, snapshot identity, sample counts, scores
 
 The job uses HTTP PUT to replace its entire Pushgateway group each run, removing stale values. Group `job=aegis_drift,source=real` is isolated from demonstration data. Metrics are:
 
-- `ccrag_drift_value{metric_name}`: actual score/statistic, only when available.
-- `ccrag_drift_status{metric_name}`: 0 passed, 1 alert, 2 insufficient data, 3 execution error.
-- `ccrag_drift_breach{metric_name}`: only for evaluated comparisons.
-- `ccrag_drift_samples{metric_name,window}`: current/reference sample counts.
-- `ccrag_drift_run_timestamp_seconds`, `ccrag_drift_run_duration_seconds`: freshness and runtime.
+- `aegis_rag_drift_value{metric_name}`: actual score/statistic, only when available.
+- `aegis_rag_drift_status{metric_name}`: 0 passed, 1 alert, 2 insufficient data, 3 execution error.
+- `aegis_rag_drift_breach{metric_name}`: only for evaluated comparisons.
+- `aegis_rag_drift_samples{metric_name,window}`: current/reference sample counts.
+- `aegis_rag_drift_run_timestamp_seconds`, `aegis_rag_drift_run_duration_seconds`: freshness and runtime.
 
 The Grafana Model Quality dashboard separates actual scores, statistics, sample counts and states. Select `real` or `synthetic_demo` explicitly. A missing score is never replaced by a normal-looking zero. If the job cannot reach Pushgateway, the JSON report records that error and the dashboard's evaluation-age panel identifies stale telemetry.
 

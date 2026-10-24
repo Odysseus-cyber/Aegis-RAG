@@ -9,6 +9,7 @@ import http.client
 import json
 import os
 import re
+import secrets
 import shutil
 import ssl
 import subprocess
@@ -19,12 +20,21 @@ import urllib.request
 import uuid
 from pathlib import Path
 
-from release_manifest import REPOSITORY, validate_manifest
+from release_manifest import REPOSITORY, STORAGE_NAMESPACE, validate_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 STATE = ROOT / '.runtime' / 'aegis-demo'
 API = 'http://127.0.0.1:15173/api'
 DEMO_DOCUMENT = Path('aegis-demo.pdf').stem
+
+
+def validate_record(record):
+    """Reject releases from a different data contract before touching containers."""
+    if record.get('storage_namespace') != STORAGE_NAMESPACE:
+        raise ValueError('Incompatible deployment storage namespace; restore pre-migration '
+                         'application and data together using the private archive')
+    validate_manifest(record['manifest'])
+    return record
 
 
 def command(*args, capture=False, env=None, check=True):
@@ -37,8 +47,32 @@ def compose(config, *args, **kwargs):
 
 def save(path, value):
     temporary = path.with_suffix('.tmp')
-    temporary.write_text(json.dumps(value, indent=2) + '\n')
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, 'w') as output:
+        os.fchmod(output.fileno(), 0o600)
+        output.write(json.dumps(value, indent=2) + '\n')
     temporary.replace(path)
+
+
+def grafana_password():
+    """Create a private per-installation password, or reuse it on every release."""
+    path = STATE / 'grafana-admin-password'
+    try:
+        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(descriptor) as source:
+            os.fchmod(source.fileno(), 0o600)
+            password = source.read().strip()
+        if not password:
+            raise ValueError('Grafana password file is empty; restore the private installation password')
+        return password
+    password = secrets.token_urlsafe(32)
+    with os.fdopen(descriptor, 'w') as output:
+        output.write(password + '\n')
+        output.flush()
+        os.fsync(output.fileno())
+    return password
 
 
 def request(url, data=None, timeout=600):
@@ -99,17 +133,19 @@ def prepare(version):
     # Release-specific read-only inputs restore with the selected image set on rollback.
     env = os.environ.copy()
     env.update(AEGIS_STATE=str(STATE), AEGIS_DATA=str(fixture.parent),
-               LOCAL_UID=str(os.getuid()), LOCAL_GID=str(os.getgid()))
+               LOCAL_UID=str(os.getuid()), LOCAL_GID=str(os.getgid()),
+               GRAFANA_ADMIN_PASSWORD=grafana_password())
     env.update({f'IMAGE_{name.upper()}': image['image'] + '@' + image['digest']
                 for name, image in manifest['images'].items()})
     output = compose(destination / 'docker-compose.release.yml', '--profile', 'drift',
                      'config', '--format', 'json', capture=True, env=env).stdout
     config = destination / 'compose.json'
     save(config, json.loads(output))
-    return {'manifest': manifest, 'config': str(config)}
+    return {'storage_namespace': STORAGE_NAMESPACE, 'manifest': manifest, 'config': str(config)}
 
 
 def preflight(record):
+    validate_record(record)
     config = record['config']
     compose(config, '--profile', 'drift', 'pull', '--policy', 'missing')
     for name, image in record['manifest']['images'].items():
@@ -167,6 +203,7 @@ def wait_http(url, timeout=120):
 
 
 def verify(record):
+    validate_record(record)
     config = record['config']
     for url in (API + '/health', 'http://127.0.0.1:19090/-/ready',
                 'http://127.0.0.1:13000/api/health', 'http://127.0.0.1:19091/-/ready'):
@@ -210,7 +247,8 @@ def verify(record):
         "assert {r[0] for r in rows} == set(sys.argv[2:]), rows"
     )
     compose(config, 'exec', '-T', 'backend', 'python', '-c', feedback_check, conversation, *feedback_ids)
-    report = {'status': 'passed', 'commit_sha': version['commit_sha'], 'conversation_id': conversation,
+    report = {'status': 'passed', 'storage_namespace': STORAGE_NAMESPACE,
+              'commit_sha': version['commit_sha'], 'conversation_id': conversation,
               'documents': previous[0], 'chunks': previous[1], 'feedback_ids': feedback_ids}
     save(STATE / 'reports' / 'acceptance.json', report)
     print(json.dumps(report, indent=2))
@@ -223,6 +261,7 @@ def collect_logs(record):
 
 
 def activate(record):
+    validate_record(record)
     compose(record['config'], 'up', '-d', '--wait', '--wait-timeout', '240', '--remove-orphans')
     # Nginx resolves the backend name at startup. A backend recreation can change
     # its Docker IP while Compose leaves the unchanged frontend running.
@@ -231,33 +270,64 @@ def activate(record):
 
 
 def restore(record):
+    validate_record(record)
     activate(record)
     if read_json(API + '/version')['commit_sha'] != record['manifest']['commit_sha']:
         raise RuntimeError('Rollback version check failed')
 
 
-def deploy(record, previous=None):
+def load_state():
+    path = STATE / 'state.json'
+    if not path.exists():
+        if any((STATE / name).exists() for name in ('current.json', 'previous.json')):
+            raise ValueError('Legacy deployment state exists; archive it with its application and data '
+                             'before initializing this storage namespace')
+        return {'schema_version': 1, 'storage_namespace': STORAGE_NAMESPACE,
+                'current': None, 'previous': None}
+    state = json.loads(path.read_text())
+    if state.get('schema_version') != 1 or state.get('storage_namespace') != STORAGE_NAMESPACE:
+        raise ValueError('Incompatible deployment state storage namespace')
+    validate_record(state['current'])
+    if state.get('previous') is not None:
+        validate_record(state['previous'])
+    return state
+
+
+def commit_state(current_record, previous_record):
+    # One rename commits the complete pair: a failed write leaves both old records intact.
+    save(STATE / 'state.json', {'schema_version': 1, 'storage_namespace': STORAGE_NAMESPACE,
+                              'current': current_record, 'previous': previous_record})
+
+
+def deploy(record):
+    validate_record(record)
+    state = load_state()
+    previous = state['current']
+    rollback_target = state['previous']
+    if previous and previous['manifest']['commit_sha'] != record['manifest']['commit_sha']:
+        rollback_target = previous
     # Pull/preflight failure does not touch the currently running application.
     preflight(record)
     try:
         activate(record)
         verify(record)
+        commit_state(record, rollback_target)
     except Exception:
-        collect_logs(record)
+        try:
+            collect_logs(record)
+        except Exception as log_error:
+            print(f'Could not collect deployment logs: {log_error}')
         if previous:
             restore(previous)
         else:
             compose(record['config'], 'down', check=False)
         raise
-    if previous and (not previous.get('manifest') or
-                     previous['manifest']['commit_sha'] != record['manifest']['commit_sha']):
-        save(STATE / 'previous.json', previous)
-    save(STATE / 'current.json', record)
     # Evaluation is reporting only. Functional acceptance above controls promotion.
     evaluate(record)
 
 
 def evaluate(record):
+    validate_record(record)
     result = compose(record['config'], 'run', '--rm', '--no-deps', 'drift-job',
                      '--trigger', 'adhoc', '--pipeline-version', record['manifest']['commit_sha'],
                      '--report', '/app/reports/drift.json', check=False)
@@ -267,26 +337,27 @@ def evaluate(record):
 
 
 def current():
-    path = STATE / 'current.json'
-    if not path.exists():
+    record = load_state()['current']
+    if record is None:
         raise ValueError('No verified deployment. Run deploy-demo with a published commit first.')
-    return json.loads(path.read_text())
+    return record
 
 
 def rollback():
-    old = current()
-    previous_path = STATE / 'previous.json'
-    if not previous_path.exists():
-        raise ValueError('No previous verified release to roll back to')
-    previous = json.loads(previous_path.read_text())
+    state = load_state()
+    old, previous = state['current'], state['previous']
+    if old is None:
+        raise ValueError('No verified deployment. Run deploy-demo with a published commit first.')
+    if previous is None:
+        raise ValueError('No previous verified release in this storage namespace; '
+                         'the first migrated release cannot use ordinary rollback')
     try:
         restore(previous)
         verify(previous)
+        commit_state(previous, old)
     except Exception:
         restore(old)
         raise
-    save(STATE / 'current.json', previous)
-    save(previous_path, old)
 
 
 def main():
@@ -303,8 +374,8 @@ def main():
     try:
         os.close(descriptor)
         if args.action == 'deploy':
-            previous = current() if (STATE / 'current.json').exists() else None
-            deploy(prepare(args.version), previous)
+            load_state()  # Reject legacy state before downloading or preparing directories.
+            deploy(prepare(args.version))
         elif args.action == 'verify':
             verify(current())
         elif args.action == 'rollback':

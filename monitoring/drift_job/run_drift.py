@@ -31,22 +31,22 @@ def summarize(report):
 
 
 def metrics_text(report):
-    lines = ["# TYPE ccrag_drift_status gauge", "# TYPE ccrag_drift_value gauge",
-             "# TYPE ccrag_drift_breach gauge", "# TYPE ccrag_drift_samples gauge",
-             "# TYPE ccrag_drift_run_timestamp_seconds gauge",
-             "# TYPE ccrag_drift_run_duration_seconds gauge"]
+    lines = ["# TYPE aegis_rag_drift_status gauge", "# TYPE aegis_rag_drift_value gauge",
+             "# TYPE aegis_rag_drift_breach gauge", "# TYPE aegis_rag_drift_samples gauge",
+             "# TYPE aegis_rag_drift_run_timestamp_seconds gauge",
+             "# TYPE aegis_rag_drift_run_duration_seconds gauge"]
     for metric in report["metrics"]:
         label = 'metric_name=' + json.dumps(metric["metric"])
-        lines.append(f"ccrag_drift_status{{{label}}} {STATUS[metric['status']]}")
+        lines.append(f"aegis_rag_drift_status{{{label}}} {STATUS[metric['status']]}")
         for window, key in [("current", "current_n"), ("reference", "reference_n")]:
-            lines.append(f'ccrag_drift_samples{{{label},window="{window}"}} {metric[key]}')
+            lines.append(f'aegis_rag_drift_samples{{{label},window="{window}"}} {metric[key]}')
         # Unavailable values and breach flags are omitted, never emitted as zero.
         if metric["value"] is not None:
-            lines.append(f"ccrag_drift_value{{{label}}} {metric['value']}")
+            lines.append(f"aegis_rag_drift_value{{{label}}} {metric['value']}")
         if metric["status"] in ("passed", "alert"):
-            lines.append(f"ccrag_drift_breach{{{label}}} {int(metric['status'] == 'alert')}")
-    lines.append(f"ccrag_drift_run_timestamp_seconds {report['timestamp']}")
-    lines.append(f"ccrag_drift_run_duration_seconds {report['duration_seconds']}")
+            lines.append(f"aegis_rag_drift_breach{{{label}}} {int(metric['status'] == 'alert')}")
+    lines.append(f"aegis_rag_drift_run_timestamp_seconds {report['timestamp']}")
+    lines.append(f"aegis_rag_drift_run_duration_seconds {report['duration_seconds']}")
     return "\n".join(lines) + "\n"
 
 

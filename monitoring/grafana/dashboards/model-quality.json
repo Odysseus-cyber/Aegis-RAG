@@ -1,6 +1,6 @@
 {
   "title": "Aegis-RAG \u00b7 Model Quality",
-  "uid": "ccrag-model-quality",
+  "uid": "aegis-rag-model-quality",
   "schemaVersion": 38,
   "refresh": "10s",
   "time": {
@@ -75,7 +75,7 @@
       },
       "targets": [
         {
-          "expr": "ccrag_drift_status{source=~\"$source\"}",
+          "expr": "aegis_rag_drift_status{source=~\"$source\"}",
           "legendFormat": "{{metric_name}} {{window}}",
           "instant": true,
           "range": false
@@ -101,7 +101,7 @@
       },
       "targets": [
         {
-          "expr": "ccrag_drift_value{source=~\"$source\",metric_name=~\"faithfulness_mean|answer_relevance_mean|context_precision_mean\"}",
+          "expr": "aegis_rag_drift_value{source=~\"$source\",metric_name=~\"faithfulness_mean|answer_relevance_mean|context_precision_mean\"}",
           "legendFormat": "{{metric_name}} {{window}}"
         }
       ]
@@ -122,7 +122,7 @@
       },
       "targets": [
         {
-          "expr": "ccrag_drift_value{source=~\"$source\",metric_name=\"retrieval_ks_pvalue\"}",
+          "expr": "aegis_rag_drift_value{source=~\"$source\",metric_name=\"retrieval_ks_pvalue\"}",
           "legendFormat": "{{metric_name}} {{window}}"
         }
       ]
@@ -143,7 +143,7 @@
       },
       "targets": [
         {
-          "expr": "ccrag_drift_value{source=~\"$source\",metric_name=\"response_length_psi\"}",
+          "expr": "aegis_rag_drift_value{source=~\"$source\",metric_name=\"response_length_psi\"}",
           "legendFormat": "{{metric_name}} {{window}}"
         }
       ]
@@ -164,7 +164,7 @@
       },
       "targets": [
         {
-          "expr": "ccrag_drift_value{source=~\"$source\",metric_name=\"output_cosine_similarity_drop\"}",
+          "expr": "aegis_rag_drift_value{source=~\"$source\",metric_name=\"output_cosine_similarity_drop\"}",
           "legendFormat": "{{metric_name}} {{window}}"
         }
       ]
@@ -188,7 +188,7 @@
       },
       "targets": [
         {
-          "expr": "ccrag_drift_value{source=~\"$source\",metric_name=\"feedback_thumbsdown_ratio\"}",
+          "expr": "aegis_rag_drift_value{source=~\"$source\",metric_name=\"feedback_thumbsdown_ratio\"}",
           "legendFormat": "{{metric_name}} {{window}}"
         }
       ]
@@ -209,7 +209,7 @@
       },
       "targets": [
         {
-          "expr": "ccrag_drift_samples{source=~\"$source\"}",
+          "expr": "aegis_rag_drift_samples{source=~\"$source\"}",
           "legendFormat": "{{metric_name}} {{window}}"
         }
       ]
@@ -232,7 +232,7 @@
       },
       "targets": [
         {
-          "expr": "time() - ccrag_drift_run_timestamp_seconds{source=~\"$source\"}",
+          "expr": "time() - aegis_rag_drift_run_timestamp_seconds{source=~\"$source\"}",
           "legendFormat": "{{metric_name}} {{window}}",
           "instant": true,
           "range": false
@@ -257,7 +257,7 @@
       },
       "targets": [
         {
-          "expr": "ccrag_drift_run_duration_seconds{source=~\"$source\"}",
+          "expr": "aegis_rag_drift_run_duration_seconds{source=~\"$source\"}",
           "legendFormat": "{{metric_name}} {{window}}",
           "instant": true,
           "range": false

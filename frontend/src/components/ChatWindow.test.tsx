@@ -12,8 +12,8 @@ function Harness() {
   return chat.active ? <ChatWindow conversation={chat.active} onAddMessage={chat.addMessage} onUpdateMessage={chat.updateMessage} onFeedback={chat.setFeedback} /> : null;
 }
 function seed(streaming = false) {
-  localStorage.setItem("ccrag_active_conversation", JSON.stringify("conv"));
-  localStorage.setItem("ccrag_conversations", JSON.stringify([{
+  localStorage.setItem("aegis_rag_active_conversation", JSON.stringify("conv"));
+  localStorage.setItem("aegis_rag_conversations", JSON.stringify([{
     id: "conv", docFilter: null, createdAt: "2026-01-01",
     messages: streaming ? [{ id: "old", role: "assistant", content: "Partial", isStreaming: true }] : [],
   }]));

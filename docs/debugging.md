@@ -116,7 +116,7 @@ Prometheus scrapes the backend `/metrics` endpoint every 15s.
 | URL | What it shows |
 |---|---|
 | `http://localhost:9090` | Prometheus query UI |
-| `http://localhost:3000` | Grafana dashboards (admin / admin) |
+| `http://localhost:3000` | Grafana dashboards (use the private password configured in .env) |
 | `http://localhost:9091` | Pushgateway — drift breach gauges |
 | `http://localhost:8000/metrics` | Raw Prometheus exposition |
 
@@ -124,16 +124,16 @@ Useful PromQL queries for debugging:
 
 ```promql
 # Request rate
-rate(ccrag_query_total[5m])
+rate(aegis_rag_query_total[5m])
 
 # Error rate
-rate(ccrag_query_total{status="error"}[5m])
+rate(aegis_rag_query_total{status="error"}[5m])
 
 # P95 retrieval latency
-histogram_quantile(0.95, rate(ccrag_retrieval_latency_seconds_bucket[5m]))
+histogram_quantile(0.95, rate(aegis_rag_retrieval_latency_seconds_bucket[5m]))
 
 # Active drift breaches
-ccrag_drift_breach
+aegis_rag_drift_breach
 ```
 
 ---
